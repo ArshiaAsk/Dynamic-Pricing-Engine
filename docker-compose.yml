@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  pricing-api:
+    image: dynamic-pricing:latest
+    container_name: pricing-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./configs:/app/configs:ro
+      - ./models:/app/models:ro
+      - ./data:/app/data:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
