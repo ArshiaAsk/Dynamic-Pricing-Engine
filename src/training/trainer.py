@@ -24,6 +24,7 @@ class DemandModelTrainer:
             objective="reg:squarederror",
             tree_method="hist",
             random_state=42,
+            early_stopping_rounds=50,
             # Enhanced parameters
             min_child_weight=self.config.get("min_child_weight", 1),
             gamma=self.config.get("gamma", 0),
@@ -40,7 +41,6 @@ class DemandModelTrainer:
             X_train,
             y_train,
             eval_set=[(X_val, y_val)],
-            early_stopping_rounds=50,
             verbose=False
         )
         
