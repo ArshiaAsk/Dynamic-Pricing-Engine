@@ -12,7 +12,7 @@ def client():
 
 def test_health_endpoint(client):
     """Test health check endpoint"""
-    response = client.get("/health")
+    response = client.get("/v1/health")
     
     assert response.status_code == 200
     data = response.json()
@@ -45,7 +45,7 @@ def test_optimize_price_endpoint(client):
         "optimization_method": "bayesian"
     }
     
-    response = client.post("/optimize-price", json=payload)
+    response = client.post("/v1/optimize-price", json=payload)
     
     assert response.status_code == 200
     data = response.json()
@@ -84,7 +84,7 @@ def test_optimize_with_constraints(client):
         "optimization_method": "bayesian"
     }
     
-    response = client.post("/optimize-price", json=payload)
+    response = client.post("/v1/optimize-price", json=payload)
     
     assert response.status_code == 200
     data = response.json()
@@ -109,6 +109,6 @@ def test_invalid_price_range(client):
         "price_max": 70.0  # Invalid: max < min
     }
     
-    response = client.post("/optimize-price", json=payload)
+    response = client.post("/v1/optimize-price", json=payload)
     
     assert response.status_code == 422  # Validation error
