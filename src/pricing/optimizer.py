@@ -1,16 +1,14 @@
 import numpy as np
+import pandas as pd
 
 
 class PriceOptimizer:
 
     def __init__(self, model, feature_columns):
-
         self.model = model
         self.feature_columns = feature_columns
 
-
     def optimize(self, base_features, price_min, price_max, steps=50):
-
         prices = np.linspace(price_min, price_max, steps)
 
         best_price = None
@@ -18,7 +16,6 @@ class PriceOptimizer:
         best_demand = None
 
         for p in prices:
-
             features = base_features.copy()
 
             features["price"] = p
@@ -27,14 +24,14 @@ class PriceOptimizer:
             features["price_ratio_sin"] = features["price_ratio"] * features["sin_annual"]
             features["price_ratio_cos"] = features["price_ratio"] * features["cos_annual"]
 
-            X = features[self.feature_columns].copy()
+            # Convert to DataFrame for model prediction
+            X = pd.DataFrame([features])[self.feature_columns]
 
             predicted_demand = self.model.predict(X)[0]
 
             revenue = p * predicted_demand
 
             if revenue > best_revenue:
-
                 best_revenue = revenue
                 best_price = p
                 best_demand = predicted_demand

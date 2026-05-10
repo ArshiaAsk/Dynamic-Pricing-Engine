@@ -1,5 +1,6 @@
 """Bayesian optimization for price optimization"""
 import numpy as np
+import pandas as pd
 from scipy.optimize import minimize
 from typing import Dict, Callable
 from src.utils.logger import get_logger
@@ -47,7 +48,9 @@ class BayesianPriceOptimizer:
             
             # Build features
             features = self._build_features(base_features, price)
-            X = features[self.feature_columns].copy()
+            
+            # Convert to DataFrame for model prediction
+            X = pd.DataFrame([features])[self.feature_columns]
             
             # Predict demand
             predicted_demand = self.model.predict(X)[0]
@@ -80,7 +83,7 @@ class BayesianPriceOptimizer:
         
         # Calculate final metrics
         features = self._build_features(base_features, optimal_price)
-        X = features[self.feature_columns]
+        X = pd.DataFrame([features])[self.feature_columns]
         predicted_demand = self.model.predict(X)[0]
         
         if inventory_limit is not None:
