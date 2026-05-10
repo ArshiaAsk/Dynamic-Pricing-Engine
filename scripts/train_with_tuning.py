@@ -52,7 +52,6 @@ def main():
         X_train, 
         y_train,
         eval_set=[(X_val, y_val)],
-        early_stopping_rounds=50,
         verbose=False
     )
     

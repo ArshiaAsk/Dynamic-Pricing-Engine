@@ -1,1 +1,24 @@
-["product_id", "price", "competitor_price", "price_ratio", "price_diff_pct", "dow", "is_weekend", "week", "month", "sin_annual", "cos_annual", "price_ratio_sin", "price_ratio_cos", "lag_units_sold_1", "lag_units_sold_7", "lag_units_sold_14", "roll_mean_units_7", "roll_std_units_7", "roll_mean_units_14", "roll_std_units_14", "roll_mean_units_28", "roll_std_units_28"]
+[
+  "product_id",
+  "price",
+  "competitor_price",
+  "price_ratio",
+  "price_diff_pct",
+  "dow",
+  "is_weekend",
+  "week",
+  "month",
+  "sin_annual",
+  "cos_annual",
+  "price_ratio_sin",
+  "price_ratio_cos",
+  "lag_units_sold_1",
+  "lag_units_sold_7",
+  "lag_units_sold_14",
+  "roll_mean_units_7",
+  "roll_std_units_7",
+  "roll_mean_units_14",
+  "roll_std_units_14",
+  "roll_mean_units_28",
+  "roll_std_units_28"
+]
