@@ -24,7 +24,6 @@ class DemandModelTrainer:
             objective="reg:squarederror",
             tree_method="hist",
             random_state=42,
-            early_stopping_rounds=50,
             # Enhanced parameters
             min_child_weight=self.config.get("min_child_weight", 1),
             gamma=self.config.get("gamma", 0),
@@ -34,17 +33,34 @@ class DemandModelTrainer:
         return model
 
     def train(self, model, X_train, y_train, X_val, y_val):
-        """Train with early stopping"""
+        """Train with early stopping (compatible with XGBoost 2.0+)"""
         logger.info(f"Training model with {len(X_train)} samples")
         
-        model.fit(
-            X_train,
-            y_train,
-            eval_set=[(X_val, y_val)],
-            verbose=False
-        )
+        # XGBoost 2.0+ changed early stopping API
+        try:
+            # Try new API (XGBoost 2.0+)
+            model.fit(
+                X_train,
+                y_train,
+                eval_set=[(X_val, y_val)],
+                verbose=False
+            )
+        except TypeError:
+            # Fallback to old API
+            model.fit(
+                X_train,
+                y_train,
+                eval_set=[(X_val, y_val)],
+                early_stopping_rounds=50,
+                verbose=False
+            )
         
-        logger.info(f"Training completed. Best iteration: {model.best_iteration}")
+        best_iter = getattr(model, 'best_iteration', None)
+        if best_iter:
+            logger.info(f"Training completed. Best iteration: {best_iter}")
+        else:
+            logger.info(f"Training completed.")
+        
         return model
 
     def cross_validate(self, model, X, y, n_splits=5) -> Dict:

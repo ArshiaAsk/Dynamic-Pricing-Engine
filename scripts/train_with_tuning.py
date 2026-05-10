@@ -48,12 +48,25 @@ def main():
     # Train final model with best params
     logger.info("Training final model with best parameters...")
     best_model = tuner.get_best_model()
-    best_model.fit(
-        X_train, 
-        y_train,
-        eval_set=[(X_val, y_val)],
-        verbose=False
-    )
+    
+    # XGBoost 2.0+ uses different API for early stopping
+    try:
+        # Try new API (XGBoost 2.0+)
+        best_model.fit(
+            X_train, 
+            y_train,
+            eval_set=[(X_val, y_val)],
+            verbose=False
+        )
+    except TypeError:
+        # Fallback to old API
+        best_model.fit(
+            X_train, 
+            y_train,
+            eval_set=[(X_val, y_val)],
+            early_stopping_rounds=50,
+            verbose=False
+        )
     
     # Evaluate
     evaluator = ModelEvaluator()
