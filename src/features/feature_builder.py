@@ -14,13 +14,12 @@ class FeatureBuilder:
         fb_conf = config.get("features", {})
         self.lag_days: List[int] = fb_conf.get("lag_days", [1, 7, 14])
         self.rolling_windows: List[int] = fb_conf.get("rolling_windows", [7, 14, 28])
-        self.min_history_days: int = fb_conf.get("min_history_days", 35)  # برای جلوگیری از leakage
+        self.min_history_days: int = fb_conf.get("min_history_days", 35)
 
     def load_raw(self, filename: str = "ecommerce_sales.csv") -> pd.DataFrame:
        path = RAW_DATA_DIR / filename
        logger.info(f"Loading raw data from {path}")
        df = pd.read_csv(path, parse_dates=["date"])
-       # تایپ‌ها
        df["product_id"] = df["product_id"].astype(int)
        df["price"] = df["our_price"].astype(float)
        df["competitor_price"] = df["competitor_price"].astype(float)
@@ -28,22 +27,31 @@ class FeatureBuilder:
        return df
 
     def _add_calendar_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        df["dow"] = df["date"].dt.dayofweek            # 0=Mon
+        df["dow"] = df["date"].dt.dayofweek
         df["is_weekend"] = (df["dow"] >= 5).astype(int)
         df["week"] = df["date"].dt.isocalendar().week.astype(int)
         df["month"] = df["date"].dt.month
-        # seasonality encoding
+        # Seasonality encoding
         dayofyear = df["date"].dt.dayofyear
         df["sin_annual"] = np.sin(2 * np.pi * dayofyear / 365.0)
         df["cos_annual"] = np.cos(2 * np.pi * dayofyear / 365.0)
         return df
 
     def _add_price_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        # نسبت‌ها و تفاوت درصدی
+        # Price ratios and differences
         df["price_ratio"] = df["price"] / df["competitor_price"].replace(0, np.nan)
         df["price_ratio"] = df["price_ratio"].replace([np.inf, -np.inf], np.nan).fillna(1.0)
         df["price_diff_pct"] = (df["price"] - df["competitor_price"]) / df["competitor_price"].replace(0, np.nan)
         df["price_diff_pct"] = df["price_diff_pct"].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        
+        # Additional price features for better signal
+        df["price_advantage"] = (df["competitor_price"] - df["price"]) / df["competitor_price"]
+        df["price_advantage"] = df["price_advantage"].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        
+        # Log price (helps with non-linear relationships)
+        df["log_price"] = np.log1p(df["price"])
+        df["log_comp_price"] = np.log1p(df["competitor_price"])
+        
         return df
 
     def _add_group_lags_and_rolls(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -53,23 +61,30 @@ class FeatureBuilder:
         # Lags
         for lag in self.lag_days:
             df[f"lag_units_sold_{lag}"] = grp["units_sold"].shift(lag)
+            # Also lag price for price change features
+            df[f"lag_price_{lag}"] = grp["price"].shift(lag)
 
-        # Rolling windows (past only)
+        # Price change features
+        df["price_change_1d"] = (df["price"] - df["lag_price_1"]) / df["lag_price_1"]
+        df["price_change_7d"] = (df["price"] - df["lag_price_7"]) / df["lag_price_7"]
+        
+        # Rolling windows
         for w in self.rolling_windows:
-            # rolling mean with min_periods=w to avoid partial windows (برای حرفه‌ای بودن)
             df[f"roll_mean_units_{w}"] = grp["units_sold"].apply(
                 lambda s: s.shift(1).rolling(window=w, min_periods=w).mean()
             )
             df[f"roll_std_units_{w}"] = grp["units_sold"].apply(
                 lambda s: s.shift(1).rolling(window=w, min_periods=w).std()
             )
+            # Rolling price features
+            df[f"roll_mean_price_{w}"] = grp["price"].apply(
+                lambda s: s.shift(1).rolling(window=w, min_periods=w).mean()
+            )
 
-        # حداقل تاریخ معتبر به ازای هر محصول (محصولاتی که تاریخ کافی ندارند حذف می‌شوند)
         df["row_number"] = grp.cumcount() + 1
         return df
 
     def _filter_min_history(self, df: pd.DataFrame) -> pd.DataFrame:
-        # فقط ردیف‌هایی که حداقل به اندازه min_history_days عقب داده دارند
         valid = df[df["row_number"] > self.min_history_days]
         drop_cols = ["row_number"]
         return valid.drop(columns=drop_cols)
@@ -82,37 +97,39 @@ class FeatureBuilder:
         df = self._add_group_lags_and_rolls(df)
         df = self._filter_min_history(df)
 
-        # تعامل ساده با seasonality
+        # Interaction features with seasonality
         df["price_ratio_sin"] = df["price_ratio"] * df["sin_annual"]
         df["price_ratio_cos"] = df["price_ratio"] * df["cos_annual"]
-
-        # هدف مدل (y)
+        df["price_advantage_sin"] = df["price_advantage"] * df["sin_annual"]
+        
+        # Target
         df["y_units_sold"] = df["units_sold"]
 
-        # ستون‌های خروجی و مرتب‌سازی
-        # مراقب باشیم ستون‌های leakage نداشته باشیم (ورودی‌ها فقط از گذشته و اطلاعات تقویمی)
+        # Feature columns
         feature_cols = [
             "product_id", "date",
             "price", "competitor_price",
-            "price_ratio", "price_diff_pct",
+            "price_ratio", "price_diff_pct", "price_advantage",
+            "log_price", "log_comp_price",
             "dow", "is_weekend", "week", "month",
             "sin_annual", "cos_annual",
-            "price_ratio_sin", "price_ratio_cos",
+            "price_ratio_sin", "price_ratio_cos", "price_advantage_sin",
+            "price_change_1d", "price_change_7d",
         ]
 
-        # افزودن lag/rolling به feature set
+        # Add lag/rolling features
         lag_cols = [c for c in df.columns if c.startswith("lag_units_sold_")]
         roll_cols = [c for c in df.columns if c.startswith("roll_mean_units_") or c.startswith("roll_std_units_")]
-        feature_cols += lag_cols + roll_cols
-
-        # ستون هدف را آخر اضافه می‌کنیم
+        price_roll_cols = [c for c in df.columns if c.startswith("roll_mean_price_")]
+        
+        feature_cols += lag_cols + roll_cols + price_roll_cols
         feature_cols += ["y_units_sold"]
 
-        # حذف سطرهای دارای NaN در ویژگی‌های کلیدی (به خاطر min_periods ممکن است NaN داشته باشیم)
+        # Drop NaN rows
         before = len(df)
-        df = df.dropna(subset=lag_cols + roll_cols)
+        df = df.dropna(subset=lag_cols + roll_cols + price_roll_cols + ["price_change_1d", "price_change_7d"])
         after = len(df)
-        logger.info(f"Dropped {before - after} rows due to insufficient history for rolling/lags.")
+        logger.info(f"Dropped {before - after} rows due to insufficient history.")
 
         return df[feature_cols].sort_values(["product_id", "date"])
 
