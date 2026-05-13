@@ -4,6 +4,9 @@
   "competitor_price",
   "price_ratio",
   "price_diff_pct",
+  "price_advantage",
+  "log_price",
+  "log_comp_price",
   "dow",
   "is_weekend",
   "week",
@@ -12,6 +15,9 @@
   "cos_annual",
   "price_ratio_sin",
   "price_ratio_cos",
+  "price_advantage_sin",
+  "price_change_1d",
+  "price_change_7d",
   "lag_units_sold_1",
   "lag_units_sold_7",
   "lag_units_sold_14",
@@ -20,5 +26,8 @@
   "roll_mean_units_14",
   "roll_std_units_14",
   "roll_mean_units_28",
-  "roll_std_units_28"
+  "roll_std_units_28",
+  "roll_mean_price_7",
+  "roll_mean_price_14",
+  "roll_mean_price_28"
 ]
