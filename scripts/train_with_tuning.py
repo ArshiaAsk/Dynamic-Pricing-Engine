@@ -5,6 +5,8 @@ from pathlib import Path
 import sys
 import joblib
 import json
+import mlflow
+import mlflow.xgboost
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -100,8 +102,14 @@ def main():
         model_path = model_dir / "demand_model.pkl"
         joblib.dump(best_model, model_path)
 
-        # log model to mlflow
-        tracker.log_model(best_model)
+        mlflow.set_tracking_uri("http://localhost:5000")
+
+        model_info = mlflow.xgboost.log_model(
+            best_model,
+            artifact_path="model",
+            registered_model_name="demand_forecasting_model"
+        )
+        logger.info(f"Model registered: {model_info.model_uri}")
 
         # Save features
         feature_file = model_dir / "features.json"
