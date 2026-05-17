@@ -33,4 +33,4 @@ def promote_to_stage(stage="Staging"):
 
 
 if __name__ == "__main__":
-    promote_to_stage("Staging")
+    promote_to_stage("Production")
