@@ -5,6 +5,7 @@ from typing import Dict, Optional
 
 from src.pricing.optimizer import PriceOptimizer
 from src.pricing.bayesian_optimizer import BayesianPriceOptimizer
+from src.pricing.model_loader import load_production_model
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -14,12 +15,18 @@ class PricingEngine:
     """Enhanced pricing engine with multiple optimization strategies"""
 
     def __init__(self, config):
+        self.model = None
+        self.load_model()
         self.model_path = Path(config["pricing"]["model_path"])
         self.feature_path = Path(config["pricing"]["feature_columns_path"])
         self.config = config
         
-        # Load model and features
-        self.model = joblib.load(self.model_path)
+    # Load model and features
+    def load_model(self):
+        try:
+            self.model = load_production_model()
+        except Exception as e:
+            self.model = joblib.load(self.model_path)
         with open(self.feature_path) as f:
             self.feature_columns = json.load(f)
         
