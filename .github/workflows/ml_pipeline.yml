@@ -38,3 +38,7 @@ jobs:
             - name: Train model
               run: |
                 python scripts/train_with_tuning.py
+
+            - name: Run drift tests
+              run: |
+                pytest tests/test_data_drift.py
