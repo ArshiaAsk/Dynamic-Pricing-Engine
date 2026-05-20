@@ -1,21 +1,51 @@
-version: '3.8'
+version: "3.8"
 
 services:
+
+  mlflow-db:
+    image: postgres:15
+    container_name: mlflow-db
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow
+      POSTGRES_DB: mlflow
+    volumes:
+      - mlflow_db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  mlflow:
+    image: python:3.10
+    container_name: mlflow-server
+    working_dir: /mlflow
+    volumes:
+      - ./mlflow:/mlflow
+    command: >
+      bash -c "pip install mlflow psycopg2-binary &&
+      mlflow server
+      --backend-store-uri postgresql://mlflow:mlflow@mlflow-db:5432/mlflow
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000"
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mlflow-db
+    restart: unless-stopped
+
   pricing-api:
     image: dynamic-pricing:latest
     container_name: pricing-api
     ports:
       - "8000:8000"
     environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
       - PYTHONUNBUFFERED=1
     volumes:
       - ./configs:/app/configs:ro
-      - ./models:/app/models:ro
-      - ./data:/app/data:ro
+      - ./data:/app/data
+    depends_on:
+      - mlflow
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+
+volumes:
+  mlflow_db:
