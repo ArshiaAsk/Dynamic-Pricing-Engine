@@ -109,9 +109,19 @@ class EcommerceDataGenerator:
         logger.info(f"✅ Saved raw synthetic data to {path}")
 
 
-def run():
-    gen = EcommerceDataGenerator(n_products=100, days=365)
-    df = gen.generate_sales()
+def run(days=5, append=True):
+    gen = EcommerceDataGenerator(n_products=100, days=days)
+
+    new_df = gen.generate_sales()
+
+    path = RAW_DATA_DIR / "ecommerce_sales.csv"
+    
+    if append and path.exists():
+        old_df = pd.read_csv(path)
+        df = pd.concat([old_df, new_df], ignore_index=True)
+    else:
+        df = new_df
+
     gen.save(df)
 
 if __name__ == "__main__":
