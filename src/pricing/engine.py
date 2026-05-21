@@ -2,6 +2,11 @@ import joblib
 import json
 from pathlib import Path
 from typing import Dict, Optional
+from threading import Lock
+import time
+
+import mlflow
+from mlflow.tracking import MlflowClient
 
 from src.pricing.optimizer import PriceOptimizer
 from src.pricing.bayesian_optimizer import BayesianPriceOptimizer
@@ -15,22 +20,68 @@ class PricingEngine:
     """Enhanced pricing engine with multiple optimization strategies"""
 
     def __init__(self, config):
-        self.model = None
-        self.load_model()
+        self.config = config
+
         self.model_path = Path(config["pricing"]["model_path"])
         self.feature_path = Path(config["pricing"]["feature_columns_path"])
-        self.config = config
         
+        self.model_name = config["pricing"].get(
+            "registered_model_name", "demand_forecasting_model"
+        )
+        self.reload_interval = config["pricing"].get("reload_interval_sec", 60)
+
+        self.model = None
+        self.feature_columns = None
+
+        self._last_reload_time = 0
+        self._current_version = None
+        self._lock = Lock()
+
+        self.load_model(force=True)
+
     # Load model and features
-    def load_model(self):
-        try:
-            self.model = load_production_model()
-        except Exception as e:
-            self.model = joblib.load(self.model_path)
-        with open(self.feature_path) as f:
-            self.feature_columns = json.load(f)
+    def load_model(self, force=False):
+        """Load or reload model from MLflow Production stage"""
+        with self._lock:
+            current_time = time.time()
+
+            if not force and (current_time - self._last_reload_time < self.reload_interval):
+                return
+            
+            try:
+                mlflow.set_tracking_uri("http://localhost:5000")
+                client = MlflowClient()
+
+                latest = client.get_latest_versions(
+                    self.model_name, stages=["Production"]
+                )
+
+                if latest:
+                    version = latest[0].version
+
+                    if version != self._current_version:
+                        logger.info(f"Loading new model version: {version}")
+
+                        model_uri = f"models:/{self.model_name}/Production"
+                        self.model = mlflow.pyfunc.load_model(model_uri)
+
+                        self._current_version = version
+                        self._last_reload_time = current_time
+                    else:
+                        logger.warning("No Production model found in mlflow.")
+
+            except Exception as e:
+                logger.warning(f"MLflow load failed. Falling back to local model. {e}")
+                self.model = joblib.load(self.model_path)
+
+            # Load features
+            with open(self.feature_path) as f:
+                self.feature_columns = json.load(f)
         
-        logger.info(f"Pricing engine initialized with {len(self.feature_columns)} features")
+            logger.info(
+                    f"Pricing engine ready | features: {len(self.feature_columns)} | "
+                    f"model_version: {self._current_version}"
+                )
 
     def get_optimal_price(
         self, 
@@ -53,7 +104,9 @@ class PricingEngine:
         Returns:
             Dictionary with optimization results
         """
-        
+        # Auto reload check
+        self.load_model()
+
         if method == "bayesian":
             optimizer = BayesianPriceOptimizer(self.model, self.feature_columns)
             
@@ -84,6 +137,8 @@ class PricingEngine:
             raise ValueError(f"Unknown optimization method: {method}")
         
         result["optimization_method"] = method
+        result["model_version"] = self._current_version
+
         return result
     
     def compare_methods(
