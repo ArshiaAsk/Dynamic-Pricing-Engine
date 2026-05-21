@@ -5,8 +5,10 @@ from pathlib import Path
 import sys
 import joblib
 import json
+import os
 import mlflow
 import mlflow.xgboost
+import mlflow.sklearn
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -20,6 +22,17 @@ from src.utils.mlflow_tracking import MlflowTracker
 logger = get_logger(__name__)
 
 CONFIG_PATH = Path("configs/config.yaml")
+
+
+# New CI function for get metadata
+def get_ci_metadata():
+    return {
+        "ci_run_id": os.getenv("GITHUB_RUN_ID"),
+        "commit_sha": os.getenv("GITHUB_SHA"),
+        "branch": os.getenv("GITHUB_REF_NAME"),
+        "actor": os.getenv("GITHUB_ACTOR"),
+        "executer": "github_action" if os.getenv("GITHUB_RUN_ID") else "local"
+    }
 
 
 def load_config():
@@ -39,6 +52,12 @@ def main():
 
     with tracker.start_run(run_name="xgboost_optuna_training"):
 
+        # Add CI tags to mlflow
+        ci_meta = get_ci_metadata()
+        for key, value in ci_meta.items():
+            if value:
+                mlflow.set_tag(key, value)
+
         # log config parameters
         tracker.log_params(config["model"])
 
@@ -49,6 +68,9 @@ def main():
         X_train, X_val, y_train, y_val = dataset.split(X, y)
 
         logger.info(f"Training samples: {len(X_train)}, Validation samples: {len(X_val)}")
+
+        # Dataset info log
+        mlflow.log_param("dataset_size", len(df))
 
         # Hyperparameter tuning
         n_trials = config.get("training", {}).get("tuning_trials", 50)
