@@ -42,3 +42,7 @@ jobs:
             - name: Run drift tests
               run: |
                 pytest tests/test_data_drift.py
+
+            - name: Set MLflow tracking URI
+              run: |
+                export MLFLOW_TRACKING_URI=http://localhost:5000
