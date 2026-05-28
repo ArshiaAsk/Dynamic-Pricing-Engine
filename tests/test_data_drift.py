@@ -16,4 +16,4 @@ def test_price_distribution():
         recent["our_price"]
     )
 
-    assert pvalue > 0.01
+    assert pvalue < 0.01

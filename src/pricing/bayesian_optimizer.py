@@ -120,7 +120,23 @@ class BayesianPriceOptimizer:
             features["price_ratio_sin"] = features.get("price_ratio", 1.0) * features["sin_annual"]
         if "cos_annual" in features:
             features["price_ratio_cos"] = features.get("price_ratio", 1.0) * features["cos_annual"]
-        
+        if "competitor_price" in features:
+            comp_price = features["competitor_price"]
+            features["price_advantage"] = (comp_price - price) / comp_price if comp_price > 0 else 0.0
+            features["log_comp_price"] = float(np.log1p(comp_price)) if comp_price >= 0 else 0.0
+        features["log_price"] = float(np.log1p(price)) if price >= 0 else 0.0
+        if "sin_annual" in features:
+            features["price_advantage_sin"] = features.get("price_advantage", 0.0) * features["sin_annual"]
+
+        # In API inference there is no short-term price history, so fill derived deltas/rolls
+        # with stable defaults rather than failing column selection.
+        features.setdefault("price_change_1d", 0.0)
+        features.setdefault("price_change_7d", 0.0)
+        features.setdefault("roll_mean_price_7", price)
+        features.setdefault("roll_mean_price_14", price)
+        features.setdefault("roll_mean_price_28", price)
+
+        missing_columns = [col for col in self.feature_columns if col not in features]
         return features
     
     def optimize_with_constraints(

@@ -68,11 +68,16 @@ class PricingEngine:
                         self._current_version = version
                         self._last_reload_time = current_time
                     else:
-                        logger.warning("No Production model found in mlflow.")
+                        self._last_reload_time = current_time
+                else:
+                    logger.warning("No Production model found in mlflow. Falling back to local model.")
+                    self.model = joblib.load(self.model_path)
+                    self._last_reload_time = current_time
 
             except Exception as e:
                 logger.warning(f"MLflow load failed. Falling back to local model. {e}")
                 self.model = joblib.load(self.model_path)
+                self._last_reload_time = current_time
 
             # Load features
             with open(self.feature_path) as f:
