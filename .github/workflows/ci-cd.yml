@@ -1,0 +1,271 @@
+name: CI/CD Pipeline with Auto-Promotion
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: '3.12'
+  MODEL_PERFORMANCE_THRESHOLD: 0.40  # Minimum R² for promotion
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+    
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Run unit tests
+      run: |
+        pytest tests/ -v --cov=src --cov-report=xml --cov-report=term
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install linting tools
+      run: |
+        pip install flake8 black isort mypy
+    
+    - name: Run flake8
+      run: |
+        flake8 src/ --max-line-length=120 --ignore=E203,W503
+      continue-on-error: true
+    
+    - name: Check code formatting
+      run: |
+        black --check src/
+      continue-on-error: true
+
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build image
+      run: |
+        docker build -t pricing-engine:${{ github.sha }} .
+    
+    - name: Save image
+      run: |
+        docker save pricing-engine:${{ github.sha }} | gzip > pricing-engine.tar.gz
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-image
+        path: pricing-engine.tar.gz
+        retention-days: 7
+
+  model-validation:
+    name: Validate Model Performance
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Check model exists
+      run: |
+        if [ ! -f "models/demand_model.pkl" ]; then
+          echo "Model file not found. Training required."
+          exit 1
+        fi
+    
+    - name: Validate model performance
+      run: |
+        python3 scripts/validate_model.py
+    
+    - name: Check performance threshold
+      run: |
+        R2=$(cat reports/training_metrics.json | python3 -c "import sys, json; print(json.load(sys.stdin)['R2'])")
+        echo "Model R²: $R2"
+        
+        if (( $(echo "$R2 < $MODEL_PERFORMANCE_THRESHOLD" | bc -l) )); then
+          echo "Model performance below threshold ($MODEL_PERFORMANCE_THRESHOLD)"
+          exit 1
+        fi
+        
+        echo "Model performance acceptable for production"
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, model-validation]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: staging
+      url: https://staging.pricing-api.example.com
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download Docker image
+      uses: actions/download-artifact@v3
+      with:
+        name: docker-image
+    
+    - name: Load Docker image
+      run: |
+        docker load < pricing-engine.tar.gz
+    
+    - name: Tag for staging
+      run: |
+        docker tag pricing-engine:${{ github.sha }} pricing-engine:staging
+    
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        # Add your deployment commands here
+        # Example: kubectl set image deployment/pricing-engine pricing-engine=pricing-engine:staging
+    
+    - name: Wait for deployment
+      run: |
+        echo "Waiting for staging deployment to stabilize..."
+        sleep 30
+
+  smoke-test-staging:
+    name: Smoke Tests (Staging)
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install dependencies
+      run: |
+        pip install requests pytest
+    
+    - name: Run smoke tests
+      env:
+        API_URL: https://staging.pricing-api.example.com
+      run: |
+        python3 tests/smoke_tests.py
+    
+    - name: Verify health endpoints
+      env:
+        API_URL: https://staging.pricing-api.example.com
+      run: |
+        curl -f $API_URL/v1/health || exit 1
+        curl -f $API_URL/v1/health/ready || exit 1
+        curl -f $API_URL/v1/health/live || exit 1
+
+  auto-promote-production:
+    name: Auto-Promote to Production
+    runs-on: ubuntu-latest
+    needs: [smoke-test-staging]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://pricing-api.example.com
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download Docker image
+      uses: actions/download-artifact@v3
+      with:
+        name: docker-image
+    
+    - name: Load Docker image
+      run: |
+        docker load < pricing-engine.tar.gz
+    
+    - name: Tag for production
+      run: |
+        docker tag pricing-engine:${{ github.sha }} pricing-engine:production
+        docker tag pricing-engine:${{ github.sha }} pricing-engine:latest
+    
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        # Add your production deployment commands here
+        # Example: kubectl set image deployment/pricing-engine pricing-engine=pricing-engine:production
+    
+    - name: Wait for deployment
+      run: |
+        echo "Waiting for production deployment to stabilize..."
+        sleep 30
+    
+    - name: Verify production health
+      run: |
+        curl -f https://pricing-api.example.com/v1/health || exit 1
+    
+    - name: Create deployment tag
+      run: |
+        git tag -a "deploy-$(date +%Y%m%d-%H%M%S)" -m "Production deployment"
+        # git push origin --tags
+
+  notify:
+    name: Notify Deployment
+    runs-on: ubuntu-latest
+    needs: [auto-promote-production]
+    if: always()
+    
+    steps:
+    - name: Notify success
+      if: needs.auto-promote-production.result == 'success'
+      run: |
+        echo "✅ Successfully deployed to production"
+        # Add notification logic (Slack, email, etc.)
+    
+    - name: Notify failure
+      if: needs.auto-promote-production.result == 'failure'
+      run: |
+        echo "❌ Production deployment failed"
+        # Add notification logic
