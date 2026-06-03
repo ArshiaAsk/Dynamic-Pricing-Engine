@@ -47,8 +47,8 @@ class PricingRequest(BaseModel):
                 raise ValueError('price_max must be greater than price_min')
         return v
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "product_id": 42,
                 "competitor_price": 89.99,
@@ -74,7 +74,7 @@ class PricingRequest(BaseModel):
                 "inventory_limit": 100
             }
         }
-
+    }
 
 class PricingResponse(BaseModel):
     """Enhanced pricing response"""
@@ -93,8 +93,8 @@ class PricingResponse(BaseModel):
     optimization_success: Optional[bool] = Field(None, description="Optimization succeeded")
     optimization_iterations: Optional[int] = Field(None, description="Number of iterations")
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "optimal_price": 87.50,
                 "expected_demand": 48.3,
@@ -107,3 +107,4 @@ class PricingResponse(BaseModel):
                 "optimization_iterations": 12
             }
         }
+    }

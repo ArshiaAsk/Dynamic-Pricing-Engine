@@ -13,8 +13,6 @@ from pathlib import Path
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
-DEBUG_LOG_PATH = Path("/home/arshiaask/projects/Dynamic-Pricing-Engine/.cursor/debug-3d1d61.log")
-
 router = APIRouter()
 
 CONFIG_PATH = Path("configs/config.yaml")
@@ -40,7 +38,7 @@ def optimize_price(payload: PricingRequest):
     
     try:
         # Convert request to dict
-        features_dict = payload.dict(exclude={'price_min', 'price_max', 'optimization_method', 
+        features_dict = payload.model_dump(exclude={'price_min', 'price_max', 'optimization_method', 
                                                'cost', 'min_margin_pct', 'inventory_limit'})
         
         # Remove None values
@@ -99,7 +97,7 @@ def optimize_price(payload: PricingRequest):
             request_id=request_id,
             error_type=type(e).__name__,
             error_message=str(e),
-            input_data=payload.dict(),
+            input_data=payload.model_dump(),
             metadata={'product_id': payload.product_id}
         )
         
@@ -114,22 +112,6 @@ def optimize_price(payload: PricingRequest):
 def health_check():
     """Comprehensive health check endpoint"""
     health = health_checker.check_health(model=engine.model)
-    # region agent log
-    with DEBUG_LOG_PATH.open("a", encoding="utf-8") as _f:
-        _f.write(json.dumps({
-            "sessionId": "3d1d61",
-            "runId": "pre-fix",
-            "hypothesisId": "H4",
-            "location": "src/api/router.py:121",
-            "message": "health endpoint computed status",
-            "data": {
-                "status": health.get("status"),
-                "model_check": health.get("checks", {}).get("model"),
-                "error_rate": health.get("metrics", {}).get("error_rate")
-            },
-            "timestamp": int(time.time() * 1000)
-        }) + "\n")
-    # endregion
     
     # Return 503 if unhealthy
     if health['status'] != 'healthy':
