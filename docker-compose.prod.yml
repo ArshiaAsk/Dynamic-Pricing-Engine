@@ -1,0 +1,66 @@
+ version: "3.8"
+ 
+ services:
+   pricing-api:
+     build:
+       context: .
+       dockerfile: Dockerfile.prod
+     image: dynamic-pricing:production
+     container_name: pricing-api-prod
+     restart: unless-stopped
+     ports:
+       - "8000:8000"
+     environment:
+       - APP_ENV=production
+       - LOG_LEVEL=INFO
+       - LOG_FORMAT=json
+       - RATE_LIMIT_ENABLED=true
+       - MONITORING_ENABLED=true
+     volumes:
+       - ./models:/app/models:ro
+       - ./configs:/app/configs:ro
+       - ./logs:/app/logs
+       - ./data:/app/data
+       - ./backups:/app/backups
+     healthcheck:
+       test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/v1/health')"]
+       interval: 30s
+       timeout: 10s
+       retries: 3
+       start_period: 40s
+     deploy:
+       resources:
+         limits:
+           cpus: '1.0'
+           memory: 1G
+         reservations:
+           cpus: '0.5'
+           memory: 512M
+     logging:
+       driver: "json-file"
+       options:
+         max-size: "10m"
+         max-file: "3"
+ 
+   nginx:
+     image: nginx:alpine
+     container_name: nginx-proxy
+     restart: unless-stopped
+     ports:
+       - "80:80"
+       - "443:443"
+     volumes:
+       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+       - ./nginx/ssl:/etc/nginx/ssl:ro
+     depends_on:
+       - pricing-api
+     logging:
+       driver: "json-file"
+       options:
+         max-size: "10m"
+         max-file: "3"
+ 
+ volumes:
+   logs:
+   data:
+   backups:
