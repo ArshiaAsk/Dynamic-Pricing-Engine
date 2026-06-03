@@ -1,5 +1,6 @@
 import joblib
 import json
+import os
 from pathlib import Path
 from typing import Dict, Optional
 from threading import Lock
@@ -49,7 +50,9 @@ class PricingEngine:
                 return
             
             try:
-                mlflow.set_tracking_uri("http://localhost:5000")
+                mlflow.set_tracking_uri(
+                    os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+                )
                 client = MlflowClient()
                 
                 # Use search_model_versions instead of deprecated get_latest_versions

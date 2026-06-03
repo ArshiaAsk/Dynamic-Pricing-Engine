@@ -77,7 +77,12 @@ def main():
         mlflow.log_param("dataset_size", len(df))
 
         # Hyperparameter tuning
-        n_trials = config.get("training", {}).get("tuning_trials", 50)
+        n_trials = int(
+            os.getenv(
+                "TUNING_TRIALS",
+                config.get("training", {}).get("tuning_trials", 50),
+            )
+        )
         tuner = HyperparameterTuner(X_train, y_train, n_trials=n_trials, cv_folds=3)
 
         tuning_results = tuner.tune()

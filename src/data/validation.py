@@ -24,3 +24,17 @@ def validate_data(df: pd.DataFrame) -> bool:
 
     logger.info("✅ Data validation passed")
     return True
+
+
+if __name__ == "__main__":
+    import sys
+    from src.utils.paths import RAW_DATA_DIR
+
+    data_path = RAW_DATA_DIR / "ecommerce_sales.csv"
+    if not data_path.exists():
+        logger.error(f"Data file not found: {data_path}")
+        sys.exit(1)
+
+    df = pd.read_csv(data_path)
+    if not validate_data(df):
+        sys.exit(1)
