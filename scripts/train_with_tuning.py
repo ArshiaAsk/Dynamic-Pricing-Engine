@@ -42,6 +42,10 @@ def load_config():
 
 def main():
 
+    # Set MLflow tracking URI first, before any MLflow operations
+    mlflow_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+    mlflow.set_tracking_uri(mlflow_uri)
+
     logger.info("=" * 60)
     logger.info("Training with Hyperparameter Tuning")
     logger.info("=" * 60)
@@ -123,8 +127,6 @@ def main():
         # Save model locally
         model_path = model_dir / "demand_model.pkl"
         joblib.dump(best_model, model_path)
-
-        mlflow.set_tracking_uri("http://localhost:5000")
 
         model_info = mlflow.xgboost.log_model(
             best_model,

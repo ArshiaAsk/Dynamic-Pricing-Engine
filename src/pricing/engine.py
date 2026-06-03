@@ -51,13 +51,24 @@ class PricingEngine:
             try:
                 mlflow.set_tracking_uri("http://localhost:5000")
                 client = MlflowClient()
-
-                latest = client.get_latest_versions(
-                    self.model_name, stages=["Production"]
+                
+                # Use search_model_versions instead of deprecated get_latest_versions
+                versions = client.search_model_versions(
+                    filter_string=f"name='{self.model_name}' and tags.stage='Production'",
+                    order_by=["version_number DESC"],
+                    max_results=1
                 )
-
-                if latest:
-                    version = latest[0].version
+                
+                # If no versions with stage tag found, try alias-based approach
+                if not versions:
+                    try:
+                        model_version = client.get_model_version_by_alias(self.model_name, "production")
+                        versions = [model_version]
+                    except Exception:
+                        versions = []
+                
+                if versions:
+                    version = versions[0].version
 
                     if version != self._current_version:
                         logger.info(f"Loading new model version: {version}")
