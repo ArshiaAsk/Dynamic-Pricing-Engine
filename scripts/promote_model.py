@@ -4,7 +4,7 @@ from mlflow.tracking import MlflowClient
 MODEL_NAME = "demand_forecasting_model"
 
 
-def promote_to_stage(stage="Staging"):
+def promote_to_stage(stage: str):
     mlflow.set_tracking_uri("http://localhost:5000")
 
     client = MlflowClient()
@@ -33,4 +33,4 @@ def promote_to_stage(stage="Staging"):
 
 
 if __name__ == "__main__":
-    promote_to_stage("Production")
+    promote_to_stage("Staging")
