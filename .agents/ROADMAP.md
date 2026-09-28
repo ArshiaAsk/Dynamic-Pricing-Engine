@@ -1,0 +1,310 @@
+# ROADMAP.md — From broken prototype to honest, working demo
+
+This is the prioritized backlog for taking the Dynamic Pricing Engine from
+"learning prototype with a fake core" to "honest, working, resume-appropriate
+production demo." It is derived from `.agents/STATE.md` (verified ground truth).
+
+**Reference commits:** Ground truth verified against commit `c32841f` (see `.agents/STATE.md`). This planning revision sits on top of the working tree at the current commit (see `git log -1`); no new commit was created for these `.agents/` edits.
+
+**Guiding rule:** the headline capability must become true before anything is advertised.
+Do not present a claim as working until an item below that makes it true is `done`.
+
+**Priorities (re-set 2026-09-28):** P0 = R1, R2, R3, R6, R7, R8, R9, R10 (8 items — the
+core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2 = R27–R33
+(7 items). Total: 33 items.
+
+---
+
+## How to use this file
+
+1. **Before starting an item**, set its `Status:` to `in-progress`. Do not start two
+   items that depend on the same unfinished item unless they are truly independent.
+2. **Move an item to `done` only after its Acceptance criteria are verified** by actually
+   running the stated check (command, test, or assertion) and observing the stated result.
+   Paste the observed evidence (command + output) under the item, or reference the test
+   name and its pass.
+3. **Never mark something `done` based on the item's description alone.** A title like
+   "Fix the optimizer" is not evidence. The acceptance criterion is the evidence.
+4. If an item's acceptance cannot be met, leave it `in-progress` or split it into smaller
+   checkable items; do not silently weaken the criterion.
+5. If you change the code, re-verify the relevant rows in `.agents/STATE.md` and update
+   the `Last verified` line there.
+6. **Reference values that derive from a model artifact must be computed at test time**
+   (see CONVENTIONS rule 34). Acceptance criteria below therefore state *how* to compute a
+   reference, never a frozen number — any retrain (e.g. R12) would invalidate a frozen one.
+
+**Status values:** `todo` (all items start here) · `in-progress` · `done` · `blocked`.
+
+**Dependency notation:** "Depends on: R1, R2" means those must be `done` first.
+
+---
+
+## P0 — Core is fake or blocks everything else
+
+### R1 — Replace the non-functional "Bayesian" optimizer with a real search
+- **Priority:** P0
+- **Status:** todo
+- **Files touched:** `src/pricing/bayesian_optimizer.py`, `src/pricing/search.py` (new, optional)
+- **Acceptance criteria:** Against the committed `models/demand_model.pkl` + `models/features.json`, using the standard `base_features` from STATE.md §2, for bounds `(30,80)`, `(70,110)`, `(10,200)`, `(100,120)`, and `(30,120)`: the returned `expected_revenue` is **>= 0.99 ×** the maximum revenue over a fine grid of **>= 901 points** on the same bounds, where the reference grid is computed **at test time with the same model and the same bounds** (no hardcoded numbers); `optimization_success` is `True`; and the returned price lies within the bounds. Additionally, for any range where the reference grid's argmax is strictly interior, the returned price must not sit on a bound. (Comparing **revenue** rather than price is required because a tree model's revenue curve is piecewise and has plateaus — distinct prices can tie at the same revenue, so a price-equality test would be both fragile and wrong.) No `scipy.optimize.minimize(method='L-BFGS-B')` (or any gradient method) remains on the tree objective.
+- **Depends on:** none
+
+### R2 — Fix grid search to build the complete 31-column feature frame
+- **Priority:** P0
+- **Status:** todo
+- **Files touched:** `src/pricing/optimizer.py`
+- **Acceptance criteria:** `PriceOptimizer(model, feats).optimize(base, 70, 110, 50)` returns a dict without raising, with `70 <= optimal_price <= 110` and `expected_revenue >= 0.99 * (max revenue over a >= 901-point grid on the same bounds, computed **at test time with the same model and bounds** — no hardcoded reference)`. `POST /v1/optimize-price` with `optimization_method="grid_search"` (canonical; `"grid"` is an accepted alias, per DECISIONS D2) returns HTTP 200 (not 500). The 9-column `KeyError` from STATE.md §5.1 no longer occurs.
+- **Depends on:** none
+
+### R3 — Make `mlflow` import lazy/optional so serving and tests start without it
+- **Priority:** P0
+- **Status:** todo
+- **Files touched:** `src/pricing/engine.py:9`, `src/pricing/model_loader.py:1-2`, `src/utils/mlflow_tracking.py:1-2`, `src/api/server.py`
+- **Acceptance criteria:** In an environment where importing `mlflow` fails (or with `sys.modules["mlflow"] = None` forced), `python -c "import src.api.server"` exits 0, and `python -m src.api.server` serves `GET /v1/health` → HTTP 200 using the local pickle. No top-level unconditional `import mlflow` remains on the API import path. (Optional/lazy imports of heavy dependencies in production code are *required* — see CONVENTIONS rule 19.)
+- **Depends on:** none
+
+### R6 — One canonical search method name: `grid_search` (alias `grid`); legacy `"bayesian"` is rejected
+- **Priority:** P0
+- **Status:** todo
+- **Files touched:** `src/pricing/engine.py:129-156`, `src/api/schemas.py:36`
+- **Acceptance criteria:** There is exactly one canonical search method, honestly named `grid_search`, with `grid` accepted as an alias (DECISIONS D2). `POST /v1/optimize-price` with each of `"grid_search"` and `"grid"` returns HTTP 200 and a price within the requested bounds. The legacy `"bayesian"` method is **rejected**: `"bayesian"` → HTTP 422 validation error, not 500 and not a deprecation-warning alias. Any other unknown method also returns HTTP 422, not 500.
+- **Depends on:** R2
+
+### R7 — Real-model optimizer regression test (the test that would have caught the bug)
+- **Priority:** P0
+- **Status:** todo
+- **Files touched:** `tests/test_optimizer_real.py` (new)
+- **Acceptance criteria:** The test loads the committed `models/demand_model.pkl` + `models/features.json` and asserts every condition in R1 and R2. All reference values are computed **at test time** from the loaded artifact and the given bounds — **no hardcoded numbers** — so the test is model-agnostic and remains valid after any retrain. It is demonstrated to **FAIL** against commit `c32841f` (or with R1/R2 temporarily reverted) and to **PASS** after R1/R2.
+- **Note:** R7 must be **re-run after R12** (R12 retrains the model and changes the artifact that R7's reference is derived from).
+- **Depends on:** R1, R2
+
+### R8 — Default `pytest tests/` collects and passes
+- **Priority:** P0
+- **Status:** todo
+- **Files touched:** `tests/test_api.py`, `tests/conftest.py` (new), `pytest.ini`
+- **Acceptance criteria:** `pytest tests/` (no flags) exits 0 with 0 collection errors and ≥ 20 tests. The mlflow-dependent import in `tests/test_api.py` no longer aborts collection.
+- **Depends on:** R3
+
+### R9 — API contract + grid-path integration test
+- **Priority:** P0
+- **Status:** todo
+- **Files touched:** `tests/test_api.py`
+- **Acceptance criteria:** Test asserts HTTP 200 for both `grid_search` and `grid`, and HTTP 422 for the legacy `"bayesian"` method; the response contains `optimal_price`, `expected_demand`, `expected_revenue`, `optimization_method`; the price is within the requested `[price_min, price_max]`; `grid_search` revenue ≥ 0.99 × the vectorized optimum computed **at test time with the same model and bounds** (no hardcoded reference).
+- **Depends on:** R6, R8
+
+### R10 — Fix the Streamlit ↔ API response contract
+- **Priority:** P0
+- **Status:** todo
+- **Files touched:** `app.py:203,207,227,229,230,373`, `app.py:369-375`
+- **Acceptance criteria:** With the API running, the Quick tab renders Optimal Price / Predicted Demand / Est. Revenue with no `KeyError`. `app.py` sends the canonical `grid_search` method (not a rejected legacy string). A test asserts `set(keys read by app.py) ⊆ set(PricingResponse.model_fields)`, so any future field rename fails CI.
+- **Depends on:** R6
+
+---
+
+## P1 — Honesty, correctness, and operability
+
+*(R4, R5, R11–R14 were moved here from P0 on 2026-09-28 — they are not on the critical path for making the core true and the suite runnable.)*
+
+### R4 — One canonical serving feature builder shared by both optimizers
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/pricing/bayesian_optimizer.py`, `src/pricing/optimizer.py`, `src/pricing/features.py` (new) or `src/features/transformer.py`
+- **Acceptance criteria:** A unit test passes the same `(base_features, price)` to both optimizers and asserts (a) identical ordered feature vectors (same 31 columns, same values) and (b) identical `model.predict` output. Exactly one function computes price-dependent serving features; neither optimizer builds its own ad-hoc dict.
+- **Depends on:** R1, R2
+
+### R5 — Correct and loud MLflow registry resolution (and fix `promote_model.py`)
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/pricing/engine.py:44-103`, `scripts/promote_model.py`, `src/api/router.py:111-120`
+- **Acceptance criteria:** (a) When no Production stage/alias exists, the engine logs at **ERROR** (not WARNING) and exposes the active model source (e.g. `/v1/health` reports `checks.model.source == "local"`). (b) `scripts/promote_model.py` uses alias-based APIs (`set_registered_model_alias` / `set_model_version_tag`) with zero deprecated calls (`get_latest_versions`, `transition_model_version_stage`). (c) After running `promote_model.py`, the engine loads the registry model (non-null `model_version`) — verified by a test.
+- **Depends on:** R3
+
+### R11 — Remove the hardcoded fake Advanced-tab response
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `app.py:304-316`
+- **Acceptance criteria:** `grep -n "confidence_interval\|optimization_metadata" app.py` returns nothing. The Advanced tab shows either the live OpenAPI schema (`/openapi.json`) or a real response from a live call. A test asserts those fabricated keys never appear in the UI source.
+- **Depends on:** none
+
+### R12 — Honest temporal train/validation split + `product_id` handling
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/training/dataset.py:34-44`, `src/features/feature_builder.py:109-126`, `src/training/pipeline.py`, `configs/config.yaml:31-32`
+- **Acceptance criteria:** The split is chronological — a test asserts `max(train.date) < min(val.date)` (no `shuffle=True`). `product_id` is removed from the model feature list (or replaced by an out-of-fold target encoding with no leakage; assert no target leakage). `reports/training_metrics.json` is regenerated and contains both `R2` and `MAPE`.
+- **Note:** This item retrains the model, changing the committed artifact. **Re-run R7 after R12** — R7's references are recomputed at test time, so it must be re-run rather than left as a stale pass.
+- **Depends on:** none
+
+### R13 — Health check validates the actually-served model type
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/monitoring/health_checker.py:36-51`, `src/api/router.py:111-120`
+- **Acceptance criteria:** With a native `XGBRegressor` **and** with an `mlflow.pyfunc`-wrapped model, `GET /v1/health` returns 200 and `checks.model.status == "ok"`. No hardcoded `10`-column fallback (`getattr(model, "n_features_in_", 10)`) remains.
+- **Depends on:** R3
+
+### R14 — Convert smoke tests into a collectable pytest module
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `tests/smoke_tests.py`, `scripts/run_smoke_tests.sh`
+- **Acceptance criteria:** `pytest tests/smoke_tests.py` collects ≥ 8 tests. Against a locally started API they pass; when no API is reachable they **skip** (not error) via a fixture. The README's smoke-test command is updated.
+- **Depends on:** R8
+
+### R15 — Drift detection: wire it to real traffic or delete it (no third state)
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/monitoring/model_monitor.py`, `tests/test_data_drift.py`, `src/api/router.py`, `README.md`
+- **Acceptance criteria:** Either (a) a real caller exists (endpoint `GET /v1/drift` or `scripts/check_drift.py`) with a test that feeds known-shifted data and asserts `drift_detected == True` and known-stable data asserts `False`; or (b) `model_monitor.py` and `tests/test_data_drift.py` are deleted and every README "drift detection" claim is removed. A README claim may not exist without a passing test.
+- **Depends on:** R8
+
+### R16 — Stop leaking internal error strings from the API
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/api/router.py:91-108`
+- **Acceptance criteria:** A forced optimizer failure returns HTTP 500 whose body contains a generic message and `request_id` only. A test asserts the body contains none of `{"KeyError", "not in index", "Traceback"}`.
+- **Depends on:** R8
+
+### R17 — Fix the `PredictionLogger` shutdown crash
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/monitoring/prediction_logger.py:203-205`
+- **Acceptance criteria:** Interpreter exit produces no `ImportError: sys.meta_path is None, Python is likely shutting down` traceback. A test flushes via `atexit` and asserts buffered entries were written to disk.
+- **Depends on:** none
+
+### R18 — Config: every YAML key is read, or removed
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `configs/config.yaml`, `configs/config.dev.yaml`, `configs/config.prod.yaml`, `src/api/server.py`, `src/pricing/engine.py`, `tests/test_config.py` (new)
+- **Acceptance criteria:** A test enumerates every key in `configs/*.yaml` and fails if any key is not referenced in `src/` (with an explicit, documented allowlist). The `api:`, `monitoring:`, and `logging:` blocks are either consumed by code or deleted. STATE.md §4 must be empty of "defined but never read" entries.
+- **Depends on:** R3
+
+### R19 — Env: every `.env` var is read, or removed; add `.env.example`
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `.env`, `.env.example` (new), `tests/test_env.py` (new)
+- **Acceptance criteria:** A test enumerates `.env` keys and fails on any unused var. Decorative vars from STATE.md §4 are removed. `.env.example` lists exactly the variables the code reads (and nothing else).
+- **Depends on:** R18
+
+### R20 — Log rotation: implement it or delete the claim
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/utils/logger.py:92-100`, `README.md`, `.env`
+- **Acceptance criteria:** Either `RotatingFileHandler`/`TimedRotatingFileHandler` is configured from env, with a test that writes past the size limit and asserts a rotated `.1` file appears; or the rotation claims and `LOG_ROTATION`/`LOG_RETENTION_DAYS` are removed from README and `.env`.
+- **Depends on:** R19
+
+### R21 — `requirements.txt` correctness
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `requirements.txt`
+- **Acceptance criteria:** In a fresh venv, `pip install -r requirements.txt && pip check` succeeds. `requests` appears exactly once. `sqlalchemy` is either declared (if `ingest.py` is kept) or `ingest.py` is deleted. `shap`, `prometheus-client`, and linters are either actually used (verified by grep) or removed.
+- **Depends on:** R3
+
+### R22 — Dead code: delete or wire+test, file by file
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/pricing/{integrated_optimizer,revenue,model_loader,optimize}.py`, `src/features/{transformer,feature_pipeline}.py`, `src/monitoring/metrics_tracker.py`, `src/data/{ingest,pipeline_runner,validation}.py`, `src/utils/config.py`, `src/api/error_handlers.py:72-90`, `src/pricing/engine.py:163`
+- **Acceptance criteria:** Each file/item above is explicitly dispositioned in a committed table as **deleted** or **wired** (with a test proving reachability). An import-graph test asserts every module under `src/` is reachable from `src.api.server` or a training entry point, or is on an explicit allowlist. STATE.md §3 no longer lists the item. `src/pricing/integrated_optimizer.py` and `src/features/transformer.py` are deleted (DECISIONS D1).
+- **Depends on:** R1, R2, R15
+
+### R23 — README truth pass
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `README.md`, `scripts/verify_readme.sh` (new)
+- **Acceptance criteria:** Every command in README runs successfully on a clean checkout (captured by `scripts/verify_readme.sh`, exit 0). The curl example includes `/v1`. The R² figure is the exact regenerated number and is accompanied by MAPE. Every headline claim maps to a `CONFIRMED` or `PARTIAL` row in STATE.md; no unbacked "production-ready / enterprise-grade" claims remain. The README documents the in-memory rate-limit limitation (single process / per worker) and states plainly that all data and metrics are synthetic (DECISIONS D22/D23, folded into this item).
+- **Depends on:** R1, R2, R6, R12, R15, R24
+
+### R24 — nginx: add a real config or remove the service
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `docker-compose.prod.yml:45-61`, `nginx/nginx.conf` (new)
+- **Acceptance criteria:** `docker compose -f docker-compose.prod.yml config` succeeds; `up` starts nginx and `curl http://localhost:80/v1/health` returns 200 through the proxy. **OR** the nginx service block is removed and the README nginx claim is deleted.
+- **Depends on:** R3, R5
+
+### R25 — Docker build/compose works from a clean checkout
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `Dockerfile:1`, `docker-compose.yml:35-48`
+- **Acceptance criteria:** `docker compose build && docker compose up -d` succeeds using a standard public base image (no `docker.arvancloud.ir` or other private mirror), and `curl http://localhost:8000/v1/health` returns 200. `pricing-api` has a `build:` context. The base image Python version matches the interpreter used and tested (3.12 — see DECISIONS D16); the current Dockerfiles pin 3.10 and must be bumped.
+- **Depends on:** R3, R13
+
+### R26 — Bounded startup in `start.sh`
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `start.sh:11-26`
+- **Acceptance criteria:** Both wait loops have a maximum attempt count/timeout and exit non-zero with a clear message when the dependency never becomes healthy. A test that points the script at a non-2xx health endpoint asserts it terminates within the timeout instead of hanging.
+- **Depends on:** none
+
+---
+
+## P2 — Polish and resume hardening
+
+### R27 — CI workflow (or remove CI claims)
+- **Priority:** P2
+- **Status:** todo
+- **Files touched:** `.github/workflows/ci.yml` (new), `README.md`
+- **Acceptance criteria:** On push, the workflow runs `pytest tests/` (green per R8) and `docker build`, and its status is documented in README. **OR** all CI/CD claims are removed from README. Dead CI metadata in `scripts/train_with_tuning.py:28-35` is removed or actually exercised.
+- **Depends on:** R8, R25
+
+### R28 — Deployment scripts, or remove the claims
+- **Priority:** P2
+- **Status:** todo
+- **Files touched:** `scripts/deploy.sh`, `scripts/pre_deploy_check.sh` (new) or `README.md`
+- **Acceptance criteria:** The scripts exist, are idempotent, and `pre_deploy_check.sh` exits 0 on a healthy checkout and non-zero when a required artifact is missing. **OR** the AWS/deploy references in README are removed.
+- **Depends on:** R25
+
+### R29 — SQLite: use it or remove it
+- **Priority:** P2
+- **Status:** todo
+- **Files touched:** `src/data/ingest.py`, `data.db`, `scripts/backup_database.sh`, `scripts/restore_database.sh`, `README.md`
+- **Acceptance criteria:** Either the app reads/writes predictions or sales through SQLAlchemy (with a test) and backup/restore is exercised end-to-end, **or** `data.db`, both scripts, the `ingest.py` module, and the README DB claims are removed. No orphan database remains.
+- **Depends on:** R22
+
+### R30 — Raise coverage on the pricing/serving path
+- **Priority:** P2
+- **Status:** todo
+- **Files touched:** `tests/*`
+- **Acceptance criteria:** `pytest tests/ --cov=src --cov-report=term-missing` reports ≥ 80% for `src/pricing/*` and `src/api/*`, and the number is recorded in README.
+- **Depends on:** R7, R8, R9
+
+### R31 — Every documentation link resolves
+- **Priority:** P2
+- **Status:** todo
+- **Files touched:** `docs/API.md`, `docs/OPERATIONS.md`, `DEPLOYMENT.md`, `PRODUCTION_FEATURES.md`, `PRODUCTION_READY.md` (create) or `README.md` (delink)
+- **Acceptance criteria:** A link-check test asserts every relative Markdown link in `README.md` resolves to an existing file. Either the missing docs are created or the links are removed.
+- **Depends on:** R23
+
+### R32 — Document the causal-inference limitation
+- **Priority:** P2
+- **Status:** todo
+- **Files touched:** `README.md`, `docs/ARCHITECTURE.md` (new)
+- **Acceptance criteria:** README contains a "Limitations" section stating (a) the demand model is observational, (b) `argmax_price E[units | price]` is not a valid causal pricing policy on real data, and (c) all results are on synthetic data. A test greps for the section heading and its key phrases. This item also carries the folded-in limitations from DECISIONS D22 (rate limiting is in-memory / per worker) and D23 (all data and metrics are synthetic).
+- **Depends on:** R12, R23
+
+### R33 — Decide tracking for `.agents/`
+- **Priority:** P2
+- **Status:** done
+- **Files touched:** `.gitignore:86`, `.agents/STATE.md`, `.agents/ROADMAP.md`
+- **Acceptance criteria:** Either `.gitignore` no longer ignores `.agents/` and both files are committed, **or** the ignore is kept and explicitly documented as intentional. `git status` is unambiguous about the decision.
+- **Evidence:** 2026-09-28 — the `.agents` entry was removed from `.gitignore`; `git check-ignore .agents/STATE.md` returns nothing; `.agents/` and `AGENTS.md` are committed. (Note: the owner's edit had *added* `.agents` to `.gitignore` rather than removing it; corrected here.)
+- **Depends on:** none
+
+---
+
+## Suggested execution order (dependency-respecting)
+
+1. **Unblock the core:** R1, R2, R3 (independent — can run in parallel).
+2. **Lock in the fix:** R6, R7, R8, R9, R10.
+3. **Make the demo coherent:** R4, R5, R11, R12, R13, R14.
+4. **Make it honest and operable:** R15–R26.
+5. **Polish:** R27–R33.
+
+**Sequencing note:** R12 (step 3) retrains the model. **Re-run R7 after R12** — R7 derives
+its reference from the committed artifact at test time, so its prior pass is invalidated by
+the retrain. R7 must also be re-run after any other item that rewrites
+`models/demand_model.pkl`.
+
+**Definition of done for the whole roadmap:** `pytest tests/` is green; R7's real-model
+test passes; the Streamlit Quick tab returns a real optimum end-to-end; `README.md`
+contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md`; and
+`docker compose up` brings up a working, health-checked API from a clean checkout.
+
+---
+
+Last updated: 2026-09-28, against commit c32841f (see `.agents/STATE.md`).
