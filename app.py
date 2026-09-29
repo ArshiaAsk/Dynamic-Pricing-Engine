@@ -302,18 +302,22 @@ with tab2:
         st.json(example_request)
     
     with col2:
-        st.subheader("Example Response")
-        example_response = {
-            "optimal_price": 95.50,
-            "predicted_demand": 48.3,
-            "confidence_interval": [45.2, 51.4],
-            "optimization_metadata": {
-                "method": "bayesian",
-                "iterations": 25,
-                "time_ms": 324
-            }
-        }
-        st.json(example_response)
+        st.subheader("Live Response Schema")
+        # Sourced from the running API's OpenAPI document — never a fabricated
+        # example response (CONVENTIONS rule 25 / ROADMAP R11).
+        try:
+            openapi = requests.get(f"{api_url}/openapi.json", timeout=5).json()
+            response_schema = (
+                openapi.get("components", {})
+                .get("schemas", {})
+                .get("PricingResponse")
+            )
+            if response_schema:
+                st.json(response_schema)
+            else:
+                st.info("PricingResponse schema not found in the API's OpenAPI document.")
+        except requests.exceptions.RequestException:
+            st.info("Start the API to view the live response schema (/openapi.json).")
 
 
 # ============= TAB 3: BATCH PRICING =============

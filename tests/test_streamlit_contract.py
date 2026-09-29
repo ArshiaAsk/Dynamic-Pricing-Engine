@@ -101,3 +101,16 @@ def test_contract_test_is_not_vacuous():
     """Sanity: the schema exposes the fields the UI depends on."""
     schema_fields = set(PricingResponse.model_json_schema()["properties"])
     assert {"optimal_price", "expected_demand", "expected_revenue"} <= schema_fields
+
+
+def test_app_contains_no_fabricated_response_keys():
+    """R11 / CONVENTIONS rule 25: no hand-written fake response in the UI.
+
+    The Advanced tab used to ship a hardcoded ``example_response`` with
+    ``confidence_interval`` and ``optimization_metadata`` — fields the API never
+    returns. The UI must not present invented payloads as live data.
+    """
+    source = APP_PATH.read_text()
+    assert "confidence_interval" not in source
+    assert "optimization_metadata" not in source
+    assert "example_response" not in source
