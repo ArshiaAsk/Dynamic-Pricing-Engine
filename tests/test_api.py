@@ -1,13 +1,9 @@
-"""Tests for API endpoints"""
-import pytest
-from fastapi.testclient import TestClient
-from src.api.server import app
+"""Tests for API endpoints.
 
-
-@pytest.fixture
-def client():
-    """Create test client"""
-    return TestClient(app)
+The shared ``client`` fixture lives in ``tests/conftest.py``; the application is
+imported lazily there so this module no longer aborts collection when a heavy
+optional dependency is unavailable (ROADMAP R3/R8).
+"""
 
 
 def test_health_endpoint(client):
