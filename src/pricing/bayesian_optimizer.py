@@ -11,6 +11,7 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 
+from src.pricing.features import build_serving_features
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -133,7 +134,7 @@ class BayesianPriceOptimizer:
     def _revenue_grid(self, base_features: Dict, prices: np.ndarray, inventory_limit) -> np.ndarray:
         """Vectorized revenue for every price in ``prices``."""
         frame = pd.DataFrame(
-            [self._build_features(base_features, float(p)) for p in prices]
+            [build_serving_features(base_features, float(p), self.feature_columns) for p in prices]
         )[self.feature_columns]
         demand = self._predict_demands(frame)
         if inventory_limit is not None:
@@ -143,7 +144,7 @@ class BayesianPriceOptimizer:
     def _evaluate(self, base_features: Dict, price: float, inventory_limit):
         """Return ``(demand, revenue)`` for a single price."""
         frame = pd.DataFrame(
-            [self._build_features(base_features, float(price))]
+            [build_serving_features(base_features, float(price), self.feature_columns)]
         )[self.feature_columns]
         demand = float(self._predict_demands(frame)[0])
         if inventory_limit is not None:
@@ -167,42 +168,6 @@ class BayesianPriceOptimizer:
                 for i in range(len(frame))
             ]
         )
-
-    def _build_features(self, base_features: Dict, price: float) -> Dict:
-        """Build feature dictionary with price-dependent features"""
-        features = base_features.copy()
-
-        features["price"] = price
-
-        # Price ratio features
-        if "competitor_price" in features:
-            comp_price = features["competitor_price"]
-            features["price_ratio"] = price / comp_price if comp_price > 0 else 1.0
-            features["price_diff_pct"] = (price - comp_price) / comp_price if comp_price > 0 else 0.0
-
-        # Interaction with seasonality
-        if "sin_annual" in features:
-            features["price_ratio_sin"] = features.get("price_ratio", 1.0) * features["sin_annual"]
-        if "cos_annual" in features:
-            features["price_ratio_cos"] = features.get("price_ratio", 1.0) * features["cos_annual"]
-        if "competitor_price" in features:
-            comp_price = features["competitor_price"]
-            features["price_advantage"] = (comp_price - price) / comp_price if comp_price > 0 else 0.0
-            features["log_comp_price"] = float(np.log1p(comp_price)) if comp_price >= 0 else 0.0
-        features["log_price"] = float(np.log1p(price)) if price >= 0 else 0.0
-        if "sin_annual" in features:
-            features["price_advantage_sin"] = features.get("price_advantage", 0.0) * features["sin_annual"]
-
-        # In API inference there is no short-term price history, so fill derived deltas/rolls
-        # with stable defaults rather than failing column selection.
-        features.setdefault("price_change_1d", 0.0)
-        features.setdefault("price_change_7d", 0.0)
-        features.setdefault("roll_mean_price_7", price)
-        features.setdefault("roll_mean_price_14", price)
-        features.setdefault("roll_mean_price_28", price)
-
-        missing_columns = [col for col in self.feature_columns if col not in features]
-        return features
 
     def optimize_with_constraints(
         self,

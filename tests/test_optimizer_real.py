@@ -204,12 +204,19 @@ def test_no_gradient_method_remains_on_tree_objective():
 # R2 — grid optimizer builds the full feature frame and reaches the optimum
 # --------------------------------------------------------------------------- #
 
-def test_grid_optimizer_builds_complete_feature_frame(real_model, real_feature_columns):
-    """R2: the price-dependent frame contains every committed feature column."""
-    optimizer = PriceOptimizer(real_model, real_feature_columns)
-    features = optimizer._build_features(BASE_FEATURES, price=77.0)
+def test_grid_optimizer_builds_complete_feature_frame(real_feature_columns):
+    """R2: the price-dependent frame contains every committed feature column.
+
+    As of R4 both optimizers share a single builder
+    (:func:`src.pricing.features.build_serving_features`), so this asserts the
+    shared frame is complete and ordered for the committed model columns.
+    """
+    from src.pricing.features import build_serving_features
+
+    features = build_serving_features(BASE_FEATURES, price=77.0, feature_columns=real_feature_columns)
     missing = [col for col in real_feature_columns if col not in features]
     assert missing == []
+    assert list(features.keys()) == list(real_feature_columns)
 
 
 def test_grid_optimizer_reaches_reference_optimum(real_model, real_feature_columns):

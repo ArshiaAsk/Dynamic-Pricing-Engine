@@ -146,10 +146,18 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R4 — One canonical serving feature builder shared by both optimizers
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `src/pricing/bayesian_optimizer.py`, `src/pricing/optimizer.py`, `src/pricing/features.py` (new) or `src/features/transformer.py`
+- **Status:** done
+- **Files touched:** `src/pricing/features.py` (new), `src/pricing/bayesian_optimizer.py`, `src/pricing/optimizer.py`, `tests/test_serving_features.py` (new), `tests/test_optimizer_real.py` (R2 test retargeted to the shared builder)
 - **Acceptance criteria:** A unit test passes the same `(base_features, price)` to both optimizers and asserts (a) identical ordered feature vectors (same 31 columns, same values) and (b) identical `model.predict` output. Exactly one function computes price-dependent serving features; neither optimizer builds its own ad-hoc dict.
 - **Depends on:** R1, R2
+- **Evidence (2026-09-29, committed `models/demand_model.pkl` + `models/features.json`):**
+  - **New module** `src/pricing/features.py::build_serving_features(base_features, price, feature_columns=None)` is the only function that computes price-dependent serving features; when `feature_columns` is given it returns exactly the committed `models/features.json` columns in order.
+  - **Both optimizers consume it:** `src/pricing/optimizer.py:4,21` and `src/pricing/bayesian_optimizer.py:14,137,147` import and call `build_serving_features`; the per-optimizer `_build_features` methods (the R2 interim duplication) are deleted. `grep -n "price_advantage_sin\|log_comp_price" src/pricing/optimizer.py src/pricing/bayesian_optimizer.py` → **no matches** (no ad-hoc dict remains).
+  - **R4(a) identical ordered feature vectors:** `tests/test_serving_features.py::test_both_optimizers_feed_identical_ordered_feature_vectors` drives both optimizers over a degenerate `[77.0, 77.0]` range with a recording model and asserts the exact frames fed to `predict` have the same index (`list(...) == list(real_feature_columns)`, 31 columns) and identical values. **PASSED.**
+  - **R4(b) identical predictions:** `test_both_optimizers_produce_identical_model_predictions` asserts `real_model.predict(grid_frame)[0] == real_model.predict(bayesian_frame)[0]` and that `expected_demand`/`expected_revenue` are equal. **PASSED.**
+  - `test_exactly_one_function_computes_price_dependent_features` asserts neither optimizer source assigns the ad-hoc keys and both reference the shared builder. `test_serving_builder_covers_committed_columns_in_order` asserts the builder returns the 31 committed columns in order. **PASSED.**
+  - **No behavioral drift:** direct re-run against the committed model — `BayesianPriceOptimizer.optimize(base,70,110)` → `77.372484` / revenue `5951.359`; `PriceOptimizer.optimize(base,70,110,50)` → `77.346939` / `5949.394` — identical to the R1/R2 STATE.md values.
+  - **Suite:** `pytest tests/test_serving_features.py -v` → **4 passed**; `pytest tests/` → **38 passed, 2 skipped** (was 34+2; +4 R4 tests), 0 collection errors. R2's `test_grid_optimizer_builds_complete_feature_frame` was retargeted to the shared builder (R2's criterion — the complete 31-column frame — is unchanged and still asserted).
 
 ### R5 — Correct and loud MLflow registry resolution (and fix `promote_model.py`)
 - **Priority:** P1
