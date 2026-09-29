@@ -93,11 +93,37 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R6 — One canonical search method name: `grid_search` (alias `grid`); legacy `"bayesian"` is rejected
 - **Priority:** P0
-- **Status:** todo
-- **Files touched:** `src/pricing/engine.py:129-156`, `src/api/schemas.py:36`, `src/pricing/optimizer.py` (only if the resolution fix below lands here rather than in `engine.py`)
+- **Status:** done
+- **Files touched:** `src/api/schemas.py`, `src/pricing/engine.py`, `src/pricing/optimizer.py`, `configs/config{,.dev,.prod}.yaml` (default-method honesty), `tests/test_api.py`, `tests/test_optimizer_real.py`
 - **Acceptance criteria:** There is exactly one canonical search method, honestly named `grid_search`, with `grid` accepted as an alias (DECISIONS D2). `POST /v1/optimize-price` with each of `"grid_search"` and `"grid"` returns HTTP 200 and a price within the requested bounds. The legacy `"bayesian"` method is **rejected**: `"bayesian"` → HTTP 422 validation error, not 500 and not a deprecation-warning alias. Any other unknown method also returns HTTP 422, not 500. **Because R6 makes `grid_search` the only served optimizer, its correctness — not just its status code — must be verified:** for each bound pair in `(30,80)`, `(70,110)`, `(10,200)`, `(100,120)`, `(30,120)`, the served result's `expected_revenue` must be **≥ 0.99 ×** the maximum revenue over a **≥ 901-point** grid computed **at test time with the same model and the same bounds** (CONVENTIONS rule 34; no hardcoded reference). This requires raising `steps` / making it adaptive to the bound width, or reusing R1's dense-grid + local-refinement approach, so the default 50-point grid no longer undershoots wide ranges.
 - **Depends on:** R2
-- **Note (recorded from R2, 2026-09-29):** R2 fixed the feature-frame crash and met its own criterion at `(70,110)`, but at the caller-chosen `steps=50` the fixed-width grid undershoots on wide bounds — observed revenue ratios vs the test-time 901-point reference: `(70,110)` 1.00018, `(30,80)` 0.98977, `(30,120)` 0.97145. This is inherent to a fixed 50-point grid on a piecewise-constant revenue curve with a narrow peak (see the R2 evidence and `src/pricing/optimizer.py`). Under D2/R6 the `"bayesian"` (dense-grid + refinement) path is rejected, so unless the resolution is raised/adapted, the served optimizer would silently return sub-optimal revenue on wide ranges — hence the revenue-ratio criterion above.
+- **Evidence (2026-09-29, code commit `b48d18a`, committed `models/demand_model.pkl`; references computed at test time per CONVENTIONS rule 34):**
+  - **Implementation:** `src/api/schemas.py` now types `optimization_method` as `Literal["grid_search", "grid"]` with default `"grid_search"`, so `"bayesian"` and any unknown value fail Pydantic validation → **HTTP 422** (previously `"bayesian"` was the default and unknown values reached `engine.py`'s `ValueError` → HTTP 500). `src/pricing/engine.py` defaults to `"grid_search"`, dispatches only `grid`/`grid_search` to `PriceOptimizer`, and the `"bayesian"` branch, its now-unused `BayesianPriceOptimizer` import, and the dead `compare_methods()` were removed. `configs/*.yaml`'s unread `default_method` was corrected from `bayesian` to `grid_search` (naming honesty, rule 24).
+  - **Steps-adaptation fix (the R2 caveat):** `PriceOptimizer` no longer takes a fixed 50-point grid. `_grid_points()` scales the candidate count with the bound width (target spacing `0.02`, floor `901` points, cap `20001`) and `optimize` now vectorizes `model.predict` over the whole grid in one call. `optimize_with_constraints` (margin floor + inventory cap) was added so the served method keeps the business-constraint contract that the retired `"bayesian"` path used to provide.
+  - **R6 status codes** (`POST /v1/optimize-price`, `price_min=70, price_max=110`, via `TestClient`):
+
+    | `optimization_method` | HTTP | notes |
+    |---|---|---|
+    | `"grid_search"` | **200** | body `optimization_method="grid_search"`, `optimal_price=77.36` |
+    | `"grid"` | **200** | body `optimization_method="grid"`, `optimal_price=77.36` |
+    | `"bayesian"` | **422** | Pydantic validation error (legacy method rejected) |
+    | `"not-a-method"` | **422** | unknown value rejected (not 500) |
+    | omitted | **200** | defaults to `"grid_search"` |
+
+  - **R6 revenue ratio** — served result (method `grid_search`) vs a test-time 901-point reference, across the R1/R2 bounds:
+
+    | bounds | served price | served revenue | 901-pt ref max | ratio | ≥ 0.99? |
+    |---|---|---|---|---|---|
+    | (30,80) | 77.3600 | 5950.398 | 5948.347 | **1.00034** | ✓ |
+    | (70,110) | 77.3600 | 5950.398 | 5948.347 | **1.00034** | ✓ |
+    | (10,200) | 200.0000 | 7562.641 | 7562.641 | **1.00000** | ✓ |
+    | (100,120) | 120.0000 | 4471.819 | 4471.819 | **1.00000** | ✓ |
+    | (30,120) | 77.3600 | 5950.398 | 5945.783 | **1.00078** | ✓ |
+
+    All served prices are within their requested bounds. The pre-fix ratios from the R2 note (e.g. `(30,120)` 0.97145) no longer occur.
+  - **Regression test + pre-fix failure (CONVENTIONS rule 18):** new `tests/test_optimizer_real.py::test_served_grid_optimizer_reaches_reference_optimum` is parametrized over all five bounds and asserts the served grid optimizer's `expected_revenue ≥ 0.99 ×` the test-time 901-point reference. Against the pre-fix `optimizer.py` (restored from `HEAD`) it **fails 2 of 5** — `(30,80)` (`5887.49 < 0.99×5948.35`) and `(30,120)` (`5776.03 < 0.99×5945.78`) — and passes 5/5 after the fix. `tests/test_api.py` asserts 200 for `grid`/`grid_search` and 422 for `bayesian`/unknown.
+  - **Suite:** `pytest tests/` → **53 passed, 2 skipped**, 0 collection errors (the 2 skips are R7's bound-hugging cases). The only post-summary noise is the pre-existing `PredictionLogger.__del__` shutdown `ImportError` (STATE.md §5.11 / R17); it does not change the exit code.
+  - **Left to their own items (not R6):** `app.py:128-132` still offers `"bayesian"` in its method selectbox (R10 fixes the UI contract; it will now get 422 for that option); `README.md:158,333`, `scripts/load_test.sh:46`, and `tests/smoke_tests.py:100,148` still carry the legacy string (R23/R14 respectively). `tests/smoke_tests.py` collects 0 tests, so none affect the suite.
 
 ### R7 — Real-model optimizer regression test (the test that would have caught the bug)
 - **Priority:** P0
@@ -368,4 +394,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-29, against commit efe4d5e (R1, R2, R3, R4, R5, R7, R8, R13 done; see `.agents/STATE.md`).
+Last updated: 2026-09-29, against commit b48d18a (R1, R2, R3, R4, R5, R6, R7, R8, R13 done; see `.agents/STATE.md`).

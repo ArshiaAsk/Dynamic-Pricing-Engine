@@ -17,6 +17,30 @@ Next session should start with:
 
 ---
 
+## 2026-09-29 — R6 done: canonical `grid_search` (alias `grid`), legacy `"bayesian"` → HTTP 422, adaptive grid resolution (1 code commit)
+
+Done:
+- **R6 implemented and verified. Code commit `b48d18a`** ("feat(api): canonical grid_search method; reject legacy \"bayesian\" with 422 (R6)"), touching `src/api/schemas.py`, `src/pricing/engine.py`, `src/pricing/optimizer.py`, `configs/config{,.dev,.prod}.yaml`, `tests/test_api.py`, `tests/test_optimizer_real.py`.
+  - **Method naming / 422 (D2):** `PricingRequest.optimization_method` is now `Literal["grid_search", "grid"]` defaulting to `"grid_search"`; `"bayesian"` and any unknown value fail Pydantic validation → **HTTP 422** (previously `"bayesian"` was the default and unknown values hit `engine.py`'s `ValueError` → HTTP 500). `engine.get_optimal_price` defaults to `"grid_search"`, dispatches only `grid`/`grid_search` to `PriceOptimizer`, and the `"bayesian"` branch, its now-unused `BayesianPriceOptimizer` import, and the dead `compare_methods()` (it compared a strategy that no longer exists) were removed. `configs/*.yaml`'s unread `default_method` was corrected `bayesian` → `grid_search` (naming honesty, rule 24).
+  - **Steps-adaptation fix (the R2 caveat, resolved):** `PriceOptimizer` no longer uses a fixed 50-point grid. `_grid_points()` scales the candidate count with the bound width (target spacing `0.02`, floor `901` points, cap `20001`) and `optimize` now vectorizes `model.predict` over the whole grid. `optimize_with_constraints` (margin floor + inventory cap) was added so the served method keeps the business-constraint contract the retired `"bayesian"` path provided.
+  - **R6 status codes** (`POST /v1/optimize-price`, `price_min=70, price_max=110`, `TestClient`): `"grid_search"` → **200** (`optimal_price=77.36`); `"grid"` → **200**; `"bayesian"` → **422**; `"not-a-method"` → **422**; omitted → **200** (defaults to `grid_search`).
+  - **R6 revenue ratios** (served `grid_search` vs a test-time 901-point reference, CONVENTIONS rule 34): (30,80) **1.00034**, (70,110) **1.00034**, (10,200) **1.00000**, (100,120) **1.00000**, (30,120) **1.00078** — all ≥ 0.99 and all served prices in bounds. The R2 caveat ratios (e.g. (30,120) 0.97145) no longer occur.
+  - **Regression test + pre-fix failure (rule 18):** new `tests/test_optimizer_real.py::test_served_grid_optimizer_reaches_reference_optimum` (all five bounds). Against the pre-fix `optimizer.py` restored from `HEAD` it **fails 2 of 5** — (30,80) `5887.49 < 0.99×5948.35`, (30,120) `5776.03 < 0.99×5945.78` — and passes 5/5 after the fix. `tests/test_api.py` asserts 200 for `grid`/`grid_search` and 422 for `bayesian`/unknown.
+  - **Suite:** `pytest tests/` → **53 passed, 2 skipped**, 0 collection errors. Only post-summary noise is the pre-existing `PredictionLogger.__del__` shutdown `ImportError` (STATE §5.11 / R17).
+- **Docs updated once, after the code:** ROADMAP **R6 → done** with the status/ratio evidence and the steps-adaptation fix; STATE.md §1 (Bayesian row → no longer served; grid row → R6; constraints row; input-validation row; unit-tests row → 53 passed), §2 serving-path dispatch + verified note, §3 (added `BayesianPriceOptimizer`, removed deleted `compare_methods`), §4 (`default_method`), §5.1/§5.2/§5.3, frontend path, `Last verified` → `b48d18a`; this LOG entry.
+
+Left open / blocked:
+- **R9 (API contract test) and R10 (Streamlit contract) remain `todo`.** R6 added status-code + optimizer-level ratio tests; R9 still owes the API-level response-field + ratio-through-HTTP assertions. R10 must also stop `app.py:128-132` offering `"bayesian"` (it now 422s) and fix the `predicted_demand`/`expected_demand` mismatch.
+- `README.md:158,333`, `scripts/load_test.sh:46`, and `tests/smoke_tests.py:100,148` still carry the legacy `"bayesian"` string (R23/R14 own those; `smoke_tests.py` collects 0 tests so the suite is unaffected).
+- `BayesianPriceOptimizer` (`src/pricing/bayesian_optimizer.py`) is now reachable only from tests; deleting it (and its tests' imports) is D1/R22.
+- **R7 must be re-run after R12** (R12 retrains `models/demand_model.pkl`, invalidating R7's test-time reference).
+- `git status` at session end: working tree clean after the docs commit; `main` was not moved (all commits on `development`).
+
+Next session should start with:
+- R9 (API contract test — 200 grid/grid_search, 422 bayesian, response fields, ratio through HTTP), then R10 (Streamlit contract + method). R7 must be re-run after R12.
+
+---
+
 ## 2026-09-29 — R4, R5, R13 done: shared feature builder; loud registry resolution + promote fix; health check by model type (3 code commits)
 
 Done:

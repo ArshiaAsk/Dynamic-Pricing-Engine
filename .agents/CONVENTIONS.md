@@ -65,7 +65,7 @@ If you cannot check a rule, it is not a rule. New rules are appended at the end 
 21. Every relative link in `README.md`/`docs/` must resolve to an existing file. Do not link planned documents. (R31) — `target (after R31)`
 22. Numbers in docs must be copied from the generated artifact, not from memory, and R² must be stated together with MAPE. Re-generate artifacts before updating any number. — `target (after R23, R12)`
 23. A feature may be described in docs only if `.agents/STATE.md` marks it `CONFIRMED`, or `PARTIAL` with the caveat stated verbatim. Remove the claim or fix the code — there is no third state. (R23) — `target (after R23)`
-24. Name things what they are. If it uses `scipy` L-BFGS-B, do not call it "Bayesian"; if the split is random, do not call it "time-series validation"; if `prometheus-client` is not imported, do not claim Prometheus. — `target (after R1, R6)`
+24. Name things what they are. If it uses `scipy` L-BFGS-B, do not call it "Bayesian"; if the split is random, do not call it "time-series validation"; if `prometheus-client` is not imported, do not claim Prometheus. — `enforced (R1/R6: the served method is `grid_search`; `"bayesian"` is rejected with 422)`
 25. No hardcoded fake responses or hand-written "example" payloads presented as live data. Examples must be labeled as examples and generated from the schema, not invented. (R11) — `target (after R11)`
 
 ### Single source of truth
@@ -75,7 +75,7 @@ If you cannot check a rule, it is not a rule. New rules are appended at the end 
 
 ### Contracts
 29. Any consumer of the API must be validated against the response schema in a test: `set(keys read by the consumer) ⊆ set(PricingResponse.model_fields)`. Field renames update the consumer and the test in the same PR. (R10) — `target (after R10)`
-30. Enum-like inputs (e.g. `optimization_method`) must have a single normalization point and a test for every accepted value; unknown values return 4xx, never 500. (R6) — `target (after R6)`
+30. Enum-like inputs (e.g. `optimization_method`) must have a single normalization point and a test for every accepted value; unknown values return 4xx, never 500. (R6) — `enforced (R6: `Literal["grid_search","grid"]`; `tests/test_api.py` asserts 200 for both accepted values and 422 for `"bayesian"`/unknown)`
 
 ### Ops & dependencies
 31. Startup/wait loops must have a bounded timeout and exit non-zero on failure. Never write `until curl ...; do sleep; done` with no cap. (R26) — `target (after R26)`
@@ -89,4 +89,4 @@ If you cannot check a rule, it is not a rule. New rules are appended at the end 
 
 ---
 
-Last updated: 2026-09-28, against commit c32841f (see `.agents/STATE.md`).
+Last updated: 2026-09-29, against commit b48d18a (see `.agents/STATE.md`; rules 24 and 30 marked `enforced` after R6).
