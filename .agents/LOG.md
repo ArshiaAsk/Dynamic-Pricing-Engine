@@ -17,6 +17,30 @@ Next session should start with:
 
 ---
 
+## 2026-09-29 — R7 and R8 done: real-model optimizer regression test; plain `pytest tests/` green (2 code commits)
+
+Done:
+- **R7 implemented and verified. Code commit `75151b3`** ("test(pricing): add real-model optimizer regression test (R7)"), new file `tests/test_optimizer_real.py` (15 tests).
+  - Loads the committed `models/demand_model.pkl` + `models/features.json`; asserts R1's seven conditions (revenue ≥ 0.99× a 901-point reference grid, `optimization_success`, in-bounds, bound-aware interiority, no `L-BFGS-B`/`minimize(`, result contract + `PricingResponse`, margin constraint) and R2's (complete 31-column frame, grid revenue ratio at `(70,110)` `steps=50`).
+  - **No hardcoded model-derived numbers:** the reference optimum is computed at test time from the model on a 901-point grid built by a test-local *oracle* feature builder (`_serving_features`), deliberately independent of the optimizers' own `_build_features` so the reference is not circular (CONVENTIONS rules 14, 34). Only request inputs / criteria constants remain literal.
+  - **PASS on current code:** `pytest tests/test_optimizer_real.py -q` → **13 passed, 2 skipped** (the skips are `(10,200)`/`(100,120)`, whose true optimum is on a bound).
+  - **FAIL demonstrated against the pre-fix code:** `git checkout c32841f -- src/pricing/bayesian_optimizer.py src/pricing/optimizer.py` → **7 failed, 6 passed, 2 skipped, exit 1** (then restored to HEAD). Failures were exactly the R1/R2 bugs — L-BFGS-B returning a bound/midpoint on `(30,80)`/`(70,110)`/`(30,120)`, the bound-hugging check, `L-BFGS-B` present in source, `AttributeError: 'PriceOptimizer' object has no attribute '_build_features'`, and the exact R2 `KeyError: "['price_advantage', 'log_price', ...9 columns...] not in index"`.
+- **R8 implemented and verified. Code commit `8791772`** ("test(api): make plain pytest tests/ collect and pass (R8)"), touching `tests/conftest.py` (new), `tests/test_api.py`, `pytest.ini`.
+  - `tests/conftest.py`: repo-root `sys.path` bootstrap + shared `client` fixture that imports `src.api.server` lazily (so a heavy optional dependency cannot break collection of unrelated files). `tests/test_api.py`: local `client` fixture and module-level app import removed. `pytest.ini`: `--strict-config` added.
+  - **Evidence:** `/home/arshiaask/projects/venv/bin/pytest tests/` → **exit 0**, `34 passed, 2 skipped`, **0 collection errors**, **36 tests collected** (≥ 20 ✓). `grep -rn "mlflow" tests/` → no matches; forced-unavailable run (`sys.modules['mlflow']=None`) → **34 passed, 2 skipped, exit 0**. The `PredictionLogger.__del__` shutdown `ImportError` (STATE.md §5.11 / R17) still prints after the summary but does not change the exit code — out of R8's scope.
+- **Docs updated once, after both:** ROADMAP **R7 → done** and **R8 → done** with the evidence above; STATE.md §1 unit-tests row, §2 serving note, §5.6, and the `Last verified` line → `8791772`; this LOG entry.
+
+Left open / blocked:
+- R6 (canonical `grid_search`, reject legacy `"bayesian"` with 422, revenue-ratio criterion), R9 (API contract test), R10 (Streamlit contract) remain `todo`; R8's criterion is met, but R9 must update `tests/test_api.py` when R6 changes the accepted method values (it still posts `"bayesian"`).
+- The R2 coarse-grid caveat on wide bounds is unchanged and is now an explicit R6 criterion.
+- **R7 must be re-run after R12** (R12 retrains `models/demand_model.pkl`, invalidating R7's test-time reference).
+- No branch was created; both code commits plus the docs commit sit on the current branch (`development`, == `main` before this session). `main` was deliberately not moved this session.
+
+Next session should start with:
+- R6 (now with the revenue-ratio criterion), then R9/R10. Update `tests/test_api.py`'s `"bayesian"` payload to `"grid_search"` as part of R9 once R6 rejects it.
+
+---
+
 ## 2026-09-29 — R6 acceptance criteria amended to require a revenue-ratio check (docs-only)
 
 Done:

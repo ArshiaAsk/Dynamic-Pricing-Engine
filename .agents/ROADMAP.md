@@ -101,18 +101,28 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R7 — Real-model optimizer regression test (the test that would have caught the bug)
 - **Priority:** P0
-- **Status:** todo
+- **Status:** done
 - **Files touched:** `tests/test_optimizer_real.py` (new)
 - **Acceptance criteria:** The test loads the committed `models/demand_model.pkl` + `models/features.json` and asserts every condition in R1 and R2. All reference values are computed **at test time** from the loaded artifact and the given bounds — **no hardcoded numbers** — so the test is model-agnostic and remains valid after any retrain. It is demonstrated to **FAIL** against commit `c32841f` (or with R1/R2 temporarily reverted) and to **PASS** after R1/R2.
 - **Note:** R7 must be **re-run after R12** (R12 retrains the model and changes the artifact that R7's reference is derived from).
 - **Depends on:** R1, R2
+- **Evidence (2026-09-29, committed `models/demand_model.pkl`; references computed at test time per CONVENTIONS rule 34):**
+  - **New file:** `tests/test_optimizer_real.py` (15 tests). Loads the committed artifact via fixtures; the R1/R2 reference optimum is computed from the model on a 901-point grid built by a test-local *oracle* feature builder (`_serving_features`), deliberately independent of the optimizers' own `_build_features` so the reference cannot be circular. The only constants are request inputs (the standard `base_features`), the bound pairs, `REFERENCE_POINTS = 901`, `REVENUE_RATIO = 0.99`, `cost=60`, `min_margin_pct=0.15` — no model-derived numbers.
+  - **PASS on current code:** `/home/arshiaask/projects/venv/bin/python -m pytest tests/test_optimizer_real.py -q` → **13 passed, 2 skipped** (the 2 skips are `(10,200)`/`(100,120)`, where the reference argmax genuinely lies on a bound, so the R1 bound-hugging rule does not apply). Covers R1 criteria 1–7 (revenue ratio, `optimization_success`, in-bounds, interiority, no `L-BFGS-B`/`minimize(`, result contract + `PricingResponse`, margin constraint) and R2 (complete 31-column frame + grid revenue ratio at `(70,110)`, `steps=50`).
+  - **FAIL against the pre-fix code (demonstrated):** `git checkout c32841f -- src/pricing/bayesian_optimizer.py src/pricing/optimizer.py` then re-run → **7 failed, 6 passed, 2 skipped, exit code 1**, then restored to HEAD. Failures are exactly the R1/R2 bugs: `test_bayesian_reaches_reference_optimum[30.0-80.0|70.0-110.0|30.0-120.0]` (L-BFGS-B returns a bound/midpoint, revenue below the 0.99x reference), `test_bayesian_not_on_bound_when_reference_optimum_is_interior[30.0-80.0]`, `test_no_gradient_method_remains_on_tree_objective` (`L-BFGS-B` present), `test_grid_optimizer_builds_complete_feature_frame` (`AttributeError: 'PriceOptimizer' object has no attribute '_build_features'`), and `test_grid_optimizer_reaches_reference_optimum` (`KeyError: "['price_advantage', 'log_price', 'log_comp_price', 'price_advantage_sin', 'price_change_1d', 'price_change_7d', 'roll_mean_price_7', 'roll_mean_price_14', 'roll_mean_price_28'] not in index"` — the exact STATE.md §5.1 symptom). The `(10,200)`/`(100,120)` Bayesian cases correctly still pass pre-fix because their true optimum is on the bound.
+  - Existing suite unaffected: `pytest tests/ -q` → **34 passed, 2 skipped**.
 
 ### R8 — Default `pytest tests/` collects and passes
 - **Priority:** P0
-- **Status:** todo
+- **Status:** done
 - **Files touched:** `tests/test_api.py`, `tests/conftest.py` (new), `pytest.ini`
 - **Acceptance criteria:** `pytest tests/` (no flags) exits 0 with 0 collection errors and ≥ 20 tests. The mlflow-dependent import in `tests/test_api.py` no longer aborts collection.
 - **Depends on:** R3
+- **Evidence (2026-09-29, code commit; venv `/home/arshiaask/projects/venv`):**
+  - **Plain run:** `/home/arshiaask/projects/venv/bin/pytest tests/` → **exit 0**, `34 passed, 2 skipped`, **0 collection errors**; `--collect-only` → **36 tests collected** (≥ 20 ✓). The 2 skips are R7's bound-hugging cases where the optimum is genuinely on a bound.
+  - **mlflow-independent collection:** `grep -rn "mlflow" tests/` → **no matches**; the module-level `src.api.server` import (the old collection-abort path) is removed from `tests/test_api.py`. Forced-unavailable run `python -c "import sys; sys.modules['mlflow']=None; sys.modules['mlflow.tracking']=None; import pytest; raise SystemExit(pytest.main(['tests/','-q']))"` → **34 passed, 2 skipped, exit 0** — collection and execution no longer depend on mlflow.
+  - **Changes:** `tests/conftest.py` (new) bootstraps the repo root onto `sys.path` and provides the shared `client` fixture, importing the app lazily so a heavy dependency cannot break collection of unrelated files (CONVENTIONS rule 19); `tests/test_api.py` drops its local `client` fixture and module-level app import; `pytest.ini` adds `--strict-config` so a malformed config fails the default run instead of being silently ignored.
+  - **Known, unrelated pre-existing noise (not R8):** `PredictionLogger.__del__` raises `ImportError: sys.meta_path is None` at interpreter shutdown (STATE.md §5.11, ROADMAP R17). It prints after the summary and does **not** change the exit code (still 0).
 
 ### R9 — API contract + grid-path integration test
 - **Priority:** P0
@@ -337,4 +347,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-29, against commit ffc55fe (R1, R2, R3 done; see `.agents/STATE.md`).
+Last updated: 2026-09-29, against commit 8791772 (R1, R2, R3, R7, R8 done; see `.agents/STATE.md`).
