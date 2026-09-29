@@ -17,6 +17,24 @@ Next session should start with:
 
 ---
 
+## 2026-09-29 — R1 done; branch-divergence incident (stale branch base) found and resolved
+
+Done:
+- **R1 implemented and verified.** Replaced `scipy.optimize.minimize(method='L-BFGS-B')` in `src/pricing/bayesian_optimizer.py` with a vectorized dense price grid + local refinement (first pass targets 0.02 spacing, min 901 points, so it lands in the global basin; later passes zoom in). Batched `model.predict` with a row-by-row fallback for non-vectorized predict doubles. Removed the unused `method` parameter; no gradient call remains. **Code commit `b21e45a`** (see the incident below for why this hash and not the earlier `a325fbd`).
+- **Re-verified against *this* revision's criteria** — revenue ≥ 0.99 × a test-time ≥ 901-point reference grid; `optimization_success` True; price within bounds; bound-aware interiority; contract; constraints — **all pass** (see the ROADMAP R1 evidence table). Observed: `(30,80)`/`(70,110)`/`(30,120)` → **77.3725** (ratios 1.00051/1.00051/1.00094 vs the 901-pt max); `(10,200)` → **200.0** and `(100,120)` → **120.0**, where the true optimum is genuinely the upper bound. `optimize_with_constraints(cost=60, min_margin_pct=0.15)` → price 77.3725, margin 0.2245. `pytest tests/ --ignore=tests/test_api.py -q` → **17 passed**. API (mlflow stubbed): `POST /v1/optimize-price` bayesian → 200, `optimal_price=77.3725`.
+- **Incident — stale branch base.** The R1 branch was cut from `f4b0921`, but `main` was **amended** (`f4b0921` → `616a6df`) in the previous session (see the "R1 task-file fixes … `--amend`" entry below). Because an amend rewrites the commit, `616a6df` and `f4b0921` are **siblings** (both children of `c32841f`), and `616a6df` was never an ancestor of the branch. The branch therefore carried the **pre-revision** `.agents/` docs: D1/D2/D15 read as `proposed` (D2 un-merged), and R1's old price-equality criteria. Working from those, this session re-discovered the "strictly interior vs. 901-pt argmax" contradiction for `(10,200)`/`(100,120)` that the revision had **already** fixed (revenue-ratio + bound-aware rule), amended the stale ROADMAP copy, and produced a stale docs commit `0c21805`. The optimizer code itself was fine — only the bookkeeping baseline was stale.
+- **Resolution:** reset the branch to the code commit `a325fbd`, then `git rebase --onto 616a6df f4b0921`, which replayed **only** the optimizer change onto `main` (new hash `b21e45a`) and **dropped `0c21805` entirely**. Re-read `main`'s actual `tasks/R1-real-optimizer.md` and ROADMAP R1 and re-ran every check against those exact criteria (not the stale-branch numbers). Then one clean docs commit against `main`'s current content (this entry + ROADMAP R1 `done` + STATE.md updates). `main` fast-forwarded to include the code and docs commits.
+- Scope confirmed: `b21e45a` touches only `src/pricing/bayesian_optimizer.py`; the `"bayesian"` label and the `engine.py`/`schemas.py` dispatch are untouched, so R6/D2's `grid_search`/HTTP-422 work is entirely open and unimplemented.
+
+Left open / blocked:
+- R6/D2 (rename to `grid_search`, reject `"bayesian"` with 422) not started; R2 (grid `KeyError`), R3 (mlflow import), R8 (pytest collection) remain `todo`. A plain `pytest tests/` still aborts collection on `tests/test_api.py` (mlflow).
+- No permanent regression test was added — that is ROADMAP **R7** (separate item; R1 must not create `tests/test_optimizer_real.py`).
+
+Next session should start with:
+- R2 and R3 (P0), then R7 (real-model regression test locking in R1 + R2). **Workflow hazard to avoid:** always branch from the current `main`, and prefer a merge over an amend once a branch exists — the `--amend` here rewrote the shared base and orphaned the R1 branch.
+
+---
+
 ## 2026-09-29 — R1 task-file fixes + git-workflow note; `.agents/`+`AGENTS.md` folded into the planning commit via `--amend`
 
 Done:

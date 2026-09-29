@@ -25,9 +25,9 @@ tracing imports, and (where possible) running the code against the real committe
 | XGBoost demand-forecasting model | CONFIRMED | `src/training/trainer.py:18` (`XGBRegressor`); `models/demand_model.pkl` loads as `XGBRegressor`, `n_features_in_=31`; `models/features.json` (31 cols) | Real model, but trained on **synthetic** data from `src/data/generator.py`. |
 | "~49% R² accuracy" | PARTIAL | `reports/training_metrics.json` → `R2: 0.4682` | "0.49" rounds 0.468 up. Also unreported: `MAPE: 0.40` (40% error), `Train_R2: 0.633`. |
 | "Time-series validation" | FAKE-OR-DEAD | `src/training/dataset.py:36-42` → `train_test_split(..., shuffle=True)` | Actual split is a **random** split, not temporal. `TimeSeriesSplit` exists only in `src/training/trainer.py:81` (`cross_validate`), which is gated off by `training.run_cv: false` (`configs/config.yaml:36`) and never called by `train_with_tuning.py` (which uses default KFold `cross_val_score`, `src/training/hyperparameter_tuning.py:43-50`). |
-| "Bayesian optimization" finds optimal price | FAKE-OR-DEAD | `src/pricing/bayesian_optimizer.py:74` → `scipy.optimize.minimize(method='L-BFGS-B')` | No Bayesian library anywhere. L-BFGS-B is a **gradient** method run on a **piecewise-constant** XGBoost objective, so the numerical gradient is ~0 and it terminates at a bound or the start point. Empirically reproduced (real model): `(30,80)→80.0`, `(70,110)→90.0` (`success=False, iters=0`), `(10,200)→200.0`, `(100,120)→120.0`, `(30,120)→77.51`. True revenue-max on a 901-point grid is **77.30**. So for 4/5 ranges it returns a bound/midpoint, not an optimum. |
+| "Bayesian optimization" finds optimal price | CONFIRMED (fixed 2026-09-29, R1) | `src/pricing/bayesian_optimizer.py` `optimize` → vectorized dense price grid + local refinement; no gradient call remains | Returns the true revenue optimum. Real model (reference grid computed at test time): `(30,80)`, `(70,110)`, `(30,120)` → 77.3725 (revenue 5951.36, ≥ 0.99× the 901-point max); `(10,200)` → 200.0 and `(100,120)` → 120.0, where the true optimum is genuinely the upper bound. All `optimization_success=True`. Still **misleadingly named** — no Bayesian library is used; the rename is DECISIONS D2 / ROADMAP R6. |
 | Grid-search optimization method | FAKE-OR-DEAD (crashes) | `src/pricing/optimizer.py:19-28` | Builds only 5 of 31 required columns → `KeyError: "['price_advantage', 'log_price', 'log_comp_price', 'price_advantage_sin', 'price_change_1d', 'price_change_7d', 'roll_mean_price_7', 'roll_mean_price_14', 'roll_mean_price_28'] not in index"`. Reproduced directly and via the API (HTTP 500). |
-| Business constraints (min margin, inventory, price bounds) | PARTIAL | `src/pricing/bayesian_optimizer.py:142-186` (margin lifts lower bound), `:59-60` & `:89-90` (inventory caps demand) | Code paths work and were reproduced via API (`cost=60, min_margin_pct=0.15` → price 90, `profit_margin=0.333`). But they are applied to the *meaningless* L-BFGS-B output, so the constraint math is real while the "optimum" is not. |
+| Business constraints (min margin, inventory, price bounds) | CONFIRMED | `src/pricing/bayesian_optimizer.py` `optimize_with_constraints` (margin lifts lower bound), `optimize` (inventory caps demand) | Real and now applied to a genuine optimum. Reproduced: `optimize_with_constraints(base, 30, 120, cost=60, min_margin_pct=0.15)` → price 77.3725, `profit_margin=0.2245`; `optimize(..., inventory_limit=50)` → `expected_demand ≤ 50`. |
 | Automated feature engineering (calendar/price/temporal) | CONFIRMED | `src/features/feature_builder.py:29-134` | Real lag/rolling/seasonality/price-interaction features using `shift(1)` (no target leakage). Caveat: raw `product_id` is a model feature (`models/features.json:2`) → won't generalize to unseen products. |
 | Optuna hyperparameter tuning (up to 50 trials) | CONFIRMED (code) / PARTIAL (runnable) | `src/training/hyperparameter_tuning.py:23-92` (real TPE study); invoked at `scripts/train_with_tuning.py:86` | Genuine Optuna code. **Cannot run in this environment**: `scripts/train_with_tuning.py:9` imports `mlflow` at top → `ImportError` (protobuf). |
 | Data drift detection | FAKE-OR-DEAD | `src/monitoring/model_monitor.py:59-120` (`calculate_drift`) | Never imported or called anywhere. The only "drift test" (`tests/test_data_drift.py:19`) asserts `pvalue < 0.01`, i.e. it asserts drift *exists* in random synthetic data, and is not connected to the service. |
@@ -100,8 +100,8 @@ uvicorn src.api.server:app
         payload.model_dump(exclude={price_min,price_max,optimization_method,cost,
                                     min_margin_pct,inventory_limit})
         → PricingEngine.get_optimal_price (engine.py:105)
-             method == "bayesian" (default) → BayesianPriceOptimizer.optimize (bayesian_optimizer.py:21)
-                                                → scipy L-BFGS-B → bound/midpoint  ← BROKEN
+             method == "bayesian" (default) → BayesianPriceOptimizer.optimize (bayesian_optimizer.py)
+                                                → vectorized dense price grid + refinement → true optimum
              method == "grid"               → PriceOptimizer.optimize → KeyError → 500
              method == "grid_search"        → ValueError "Unknown optimization method" → 500
         → PredictionLogger.log_optimization (router.py:72) → logs/predictions/*.jsonl
@@ -109,7 +109,7 @@ uvicorn src.api.server:app
         → PricingResponse(**result)  (schemas.py:79; extra key `model_version` ignored by Pydantic)
 ```
 
-Verified: `GET /v1/health` → 200; `GET /v1/health/ready` → 200; `POST /v1/optimize-price` (bayesian) → 200 with `optimal_price=90.0, expected_demand=51.84, optimization_success=False, optimization_iterations=0`. The serving path was exercised via FastAPI `TestClient` with `mlflow` stubbed (because the real import is broken here).
+Verified: `GET /v1/health` → 200; `GET /v1/health/ready` → 200; `POST /v1/optimize-price` (bayesian, `price_min=70, price_max=110`) → 200 with `optimal_price=77.3725, expected_demand=76.918, expected_revenue=5951.36, optimization_success=True, optimization_iterations=2403` (re-verified 2026-09-29 after R1). The serving path was exercised via FastAPI `TestClient` with `mlflow` stubbed (because the real import is broken here).
 
 ### Frontend path
 `app.py` (Streamlit) → HTTP `POST {api_url}/v1/optimize-price`. Broken contract as noted in §1 (reads `predicted_demand`, sends `grid_search`).
@@ -186,7 +186,7 @@ Keys read by code but **absent** from config.yaml (rely on `.get` defaults): `pr
 
 1. **Grid optimizer crashes.** `src/pricing/optimizer.py:28` → `KeyError: "['price_advantage', 'log_price', 'log_comp_price', 'price_advantage_sin', 'price_change_1d', 'price_change_7d', 'roll_mean_price_7', 'roll_mean_price_14', 'roll_mean_price_28'] not in index"`. Reproduced directly and via `POST /v1/optimize-price` with `optimization_method="grid"` → HTTP 500. This same KeyError is the **only** content of the local prediction logs (`logs/predictions/*.jsonl`, untracked).
 2. **UI's grid method is rejected.** `app.py:130` sends `"grid_search"`; `engine.py:155-156` raises `ValueError: Unknown optimization method: grid_search` → HTTP 500.
-3. **"Bayesian" optimizer returns a bound or midpoint, never the true optimum.** See §1 row 4. `optimization_success=False, optimization_iterations=0` is the common case.
+3. ~~**"Bayesian" optimizer returns a bound or midpoint, never the true optimum.**~~ **Fixed 2026-09-29 (ROADMAP R1):** replaced the `scipy` L-BFGS-B call with a derivative-free dense price grid + local refinement. It now returns the true revenue optimum with `optimization_success=True`; for `(10,200)`/`(100,120)` the optimum is genuinely the upper bound. The method label is still misleading (DECISIONS D2 / R6).
 4. **README's curl example 404s** — `README.md:133` omits `/v1`.
 5. **`python src/training/train.py` fails** — `ModuleNotFoundError: No module named 'src'` (`README.md:106`).
 6. **mlflow-coupled entry points fail to import in this environment:** `python -m src.api.server`, `scripts/train_with_tuning.py`, and `tests/test_api.py` all die with `ImportError: cannot import name 'service' from 'google.protobuf'`. Consequently `pytest tests/` **aborts at collection** (0 tests run); only `pytest tests/ --ignore=tests/test_api.py` yields the 17 passing tests.
@@ -223,4 +223,4 @@ conclusions, with these corrections:
 
 ---
 
-Last verified: 2026-09-28, against commit c32841f.
+Last verified: 2026-09-29, against commit b21e45a (ROADMAP R1 optimizer fix); all other rows were last verified against c32841f.

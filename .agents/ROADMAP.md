@@ -43,10 +43,26 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R1 — Replace the non-functional "Bayesian" optimizer with a real search
 - **Priority:** P0
-- **Status:** todo
-- **Files touched:** `src/pricing/bayesian_optimizer.py`, `src/pricing/search.py` (new, optional)
+- **Status:** done
+- **Files touched:** `src/pricing/bayesian_optimizer.py` (the optional `src/pricing/search.py` was not needed)
 - **Acceptance criteria:** Against the committed `models/demand_model.pkl` + `models/features.json`, using the standard `base_features` from STATE.md §2, for bounds `(30,80)`, `(70,110)`, `(10,200)`, `(100,120)`, and `(30,120)`: the returned `expected_revenue` is **>= 0.99 ×** the maximum revenue over a fine grid of **>= 901 points** on the same bounds, where the reference grid is computed **at test time with the same model and the same bounds** (no hardcoded numbers); `optimization_success` is `True`; and the returned price lies within the bounds. Additionally, for any range where the reference grid's argmax is strictly interior, the returned price must not sit on a bound. (Comparing **revenue** rather than price is required because a tree model's revenue curve is piecewise and has plateaus — distinct prices can tie at the same revenue, so a price-equality test would be both fragile and wrong.) No `scipy.optimize.minimize(method='L-BFGS-B')` (or any gradient method) remains on the tree objective.
 - **Depends on:** none
+- **Evidence (2026-09-29, commit `b21e45a`, committed `models/demand_model.pkl`; reference grid computed at test time per CONVENTIONS rule 34):**
+
+  | bounds | optimal_price | expected_revenue | 901-pt ref max | revenue ratio | ref argmax interior? | bound-aware rule |
+  |---|---|---|---|---|---|---|
+  | (30,80) | 77.3725 | 5951.359 | 5948.347 | 1.00051 | yes | not on a bound ✓ |
+  | (70,110) | 77.3725 | 5951.359 | 5948.347 | 1.00051 | yes | not on a bound ✓ |
+  | (10,200) | 200.0000 | 7562.641 | 7562.641 | 1.00000 | no (argmax is the bound) | n/a ✓ |
+  | (100,120) | 120.0000 | 4471.819 | 4471.819 | 1.00000 | no (argmax is the bound) | n/a ✓ |
+  | (30,120) | 77.3725 | 5951.359 | 5945.783 | 1.00094 | yes | not on a bound ✓ |
+
+  All ranges: `optimization_success=True`, price within bounds, and `expected_revenue >= 0.99 ×` the reference max. Cross-checked against a 200,001-point grid: true global max 5951.35 for the three peaked ranges; the `(10,200)`/`(100,120)` optima are genuinely on the bound (revenue rises monotonically there).
+  `grep -n "L-BFGS-B\|minimize(" src/pricing/bayesian_optimizer.py` → no matches.
+  Contract unchanged: required keys present, `json.dumps` OK, `PricingResponse(**result)` validates.
+  `optimize_with_constraints(base, 30, 120, cost=60.0, min_margin_pct=0.15)` → price 77.3725, `profit_margin=0.2245`, inside the margin-adjusted bounds.
+  Existing suite unaffected: `pytest tests/ --ignore=tests/test_api.py -q` → 17 passed (`test_api.py` still aborts collection on the pre-existing mlflow issue, R3/R8).
+  The `"bayesian"` method label and the `engine.py`/`schemas.py` dispatch are untouched — the rename/422 work is R6/D2, not R1.
 
 ### R2 — Fix grid search to build the complete 31-column feature frame
 - **Priority:** P0
@@ -307,4 +323,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-28, against commit c32841f (see `.agents/STATE.md`).
+Last updated: 2026-09-29, against commit b21e45a (R1 done; see `.agents/STATE.md`).
