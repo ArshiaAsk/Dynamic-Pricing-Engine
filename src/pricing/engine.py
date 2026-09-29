@@ -6,9 +6,6 @@ from typing import Dict, Optional
 from threading import Lock
 import time
 
-import mlflow
-from mlflow.tracking import MlflowClient
-
 from src.pricing.optimizer import PriceOptimizer
 from src.pricing.bayesian_optimizer import BayesianPriceOptimizer
 from src.pricing.model_loader import load_production_model
@@ -50,6 +47,11 @@ class PricingEngine:
                 return
             
             try:
+                # MLflow is optional: import it lazily so the API can start and
+                # serve the local artifact when mlflow is unavailable or broken.
+                import mlflow
+                from mlflow.tracking import MlflowClient
+
                 mlflow.set_tracking_uri(
                     os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
                 )
