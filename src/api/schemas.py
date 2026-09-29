@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, validator
-from typing import Optional
+from typing import Literal, Optional
 
 
 class PricingRequest(BaseModel):
@@ -33,7 +33,13 @@ class PricingRequest(BaseModel):
     # Optimization parameters
     price_min: Optional[float] = Field(None, gt=0, description="Minimum price")
     price_max: Optional[float] = Field(None, gt=0, description="Maximum price")
-    optimization_method: Optional[str] = Field("bayesian", description="Optimization method")
+    optimization_method: Literal["grid_search", "grid"] = Field(
+        "grid_search",
+        description=(
+            "Optimization method: 'grid_search' (canonical) or its alias 'grid'. "
+            "Any other value (including the legacy 'bayesian') is rejected with 422."
+        ),
+    )
     
     # Business constraints
     cost: Optional[float] = Field(None, ge=0, description="Product cost")
@@ -99,7 +105,7 @@ class PricingResponse(BaseModel):
                 "optimal_price": 87.50,
                 "expected_demand": 48.3,
                 "expected_revenue": 4226.25,
-                "optimization_method": "bayesian",
+                "optimization_method": "grid_search",
                 "profit_margin": 0.314,
                 "profit_per_unit": 27.50,
                 "total_profit": 1328.25,

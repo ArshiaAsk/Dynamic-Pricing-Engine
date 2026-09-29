@@ -7,7 +7,6 @@ from threading import Lock
 import time
 
 from src.pricing.optimizer import PriceOptimizer
-from src.pricing.bayesian_optimizer import BayesianPriceOptimizer
 from src.pricing.model_loader import load_production_model
 from src.utils.logger import get_logger
 
@@ -148,91 +147,53 @@ class PricingEngine:
         base_features: Dict, 
         price_min: float, 
         price_max: float,
-        method: str = "bayesian",
+        method: str = "grid_search",
         **kwargs
     ) -> Dict:
         """
-        Get optimal price using specified optimization method
-        
+        Get the revenue-optimal price with the canonical grid search.
+
         Args:
             base_features: Base feature dictionary
             price_min: Minimum price
             price_max: Maximum price
-            method: "bayesian", "grid", or "grid_search" (default: bayesian)
-            **kwargs: Additional arguments for optimizer
-            
+            method: "grid_search" (canonical) or "grid" (alias). Any other
+                value is invalid input; the API rejects it with HTTP 422 before
+                it reaches the engine (DECISIONS D2).
+            **kwargs: Optimizer options (``steps``, ``inventory_limit``) and
+                business constraints (``cost`` + ``min_margin_pct``)
+
         Returns:
             Dictionary with optimization results
         """
         # Auto reload check
         self.load_model()
 
-        if method == "bayesian":
-            optimizer = BayesianPriceOptimizer(self.model, self.feature_columns)
-            
-            # Check if constraints are provided
-            if "cost" in kwargs and "min_margin_pct" in kwargs:
-                result = optimizer.optimize_with_constraints(
-                    base_features,
-                    price_min,
-                    price_max,
-                    cost=kwargs["cost"],
-                    min_margin_pct=kwargs.get("min_margin_pct", 0.1),
-                    inventory_limit=kwargs.get("inventory_limit")
-                )
-            else:
-                result = optimizer.optimize(
-                    base_features,
-                    price_min,
-                    price_max,
-                    inventory_limit=kwargs.get("inventory_limit")
-                )
-        
-        elif method in ("grid", "grid_search"):
-            optimizer = PriceOptimizer(self.model, self.feature_columns)
-            steps = kwargs.get("steps", 50)
-            result = optimizer.optimize(base_features, price_min, price_max, steps)
-        
-        else:
+        if method not in ("grid", "grid_search"):
             raise ValueError(f"Unknown optimization method: {method}")
-        
+
+        optimizer = PriceOptimizer(self.model, self.feature_columns)
+
+        # Check if constraints are provided
+        if "cost" in kwargs and "min_margin_pct" in kwargs:
+            result = optimizer.optimize_with_constraints(
+                base_features,
+                price_min,
+                price_max,
+                cost=kwargs["cost"],
+                min_margin_pct=kwargs.get("min_margin_pct", 0.1),
+                inventory_limit=kwargs.get("inventory_limit"),
+            )
+        else:
+            result = optimizer.optimize(
+                base_features,
+                price_min,
+                price_max,
+                steps=kwargs.get("steps", PriceOptimizer.DEFAULT_STEPS),
+                inventory_limit=kwargs.get("inventory_limit"),
+            )
+
         result["optimization_method"] = method
         result["model_version"] = self._current_version
 
         return result
-    
-    def compare_methods(
-        self,
-        base_features: Dict,
-        price_min: float,
-        price_max: float
-    ) -> Dict:
-        """Compare grid search vs Bayesian optimization"""
-        
-        logger.info("Comparing optimization methods...")
-        
-        # Grid search
-        grid_result = self.get_optimal_price(
-            base_features, price_min, price_max, method="grid"
-        )
-        
-        # Bayesian
-        bayesian_result = self.get_optimal_price(
-            base_features, price_min, price_max, method="bayesian"
-        )
-        
-        comparison = {
-            "grid_search": grid_result,
-            "bayesian": bayesian_result,
-            "revenue_improvement": float(
-                bayesian_result["expected_revenue"] - grid_result["expected_revenue"]
-            ),
-            "price_difference": float(
-                bayesian_result["optimal_price"] - grid_result["optimal_price"]
-            )
-        }
-        
-        logger.info(f"Revenue improvement (Bayesian vs Grid): "
-                   f"${comparison['revenue_improvement']:.2f}")
-        
-        return comparison

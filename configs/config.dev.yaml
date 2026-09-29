@@ -24,7 +24,7 @@
    feature_columns_path: models/features.json
    price_min: 30.0
    price_max: 120.0
-   default_method: bayesian
+   default_method: grid_search
    
  training:
    test_size: 0.2

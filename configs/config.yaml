@@ -24,8 +24,8 @@ pricing:
   # Default price range (can be overridden by API request)
   price_min: 30.0
   price_max: 120.0
-  # Default optimization method: "bayesian" or "grid"
-  default_method: bayesian
+  # Default optimization method: "grid_search" (alias "grid")
+  default_method: grid_search
   
 training:
   test_size: 0.2

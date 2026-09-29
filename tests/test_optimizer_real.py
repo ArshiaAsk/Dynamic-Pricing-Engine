@@ -18,6 +18,9 @@ Covered acceptance criteria:
   contract, and honours the margin constraint; no gradient method remains.
 * R2 — the grid optimizer builds the complete 31-column feature frame (no
   ``KeyError``) and also reaches the reference optimum.
+* R6 — the served grid optimizer (adaptive default resolution, no caller-chosen
+  step count) reaches the reference optimum on narrow and wide bounds alike, so
+  making ``grid_search`` the sole served method does not regress revenue.
 """
 import json
 from pathlib import Path
@@ -230,4 +233,29 @@ def test_grid_optimizer_reaches_reference_optimum(real_model, real_feature_colum
     result = optimizer.optimize(BASE_FEATURES, *GRID_BOUNDS, steps=GRID_STEPS)
 
     assert GRID_BOUNDS[0] <= result["optimal_price"] <= GRID_BOUNDS[1]
+    assert result["expected_revenue"] >= REVENUE_RATIO * reference_max
+
+
+# --------------------------------------------------------------------------- #
+# R6 — the served grid optimizer reaches the optimum across all bound widths
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("price_min,price_max", R1_BOUNDS)
+def test_served_grid_optimizer_reaches_reference_optimum(
+        real_model, real_feature_columns, price_min, price_max):
+    """R6: the served grid search (adaptive default resolution) is near-optimal.
+
+    ``grid_search`` is the only method served after R6, so it must reach
+    >= 0.99x the test-time 901-point reference on narrow and wide bounds alike —
+    the fixed 50-point grid undershot wide ranges (e.g. ~0.971 on ``(30,120)``).
+    """
+    _, _, reference_revenue = _reference_curve(
+        real_model, real_feature_columns, BASE_FEATURES, price_min, price_max
+    )
+    reference_max = float(np.max(reference_revenue))
+
+    optimizer = PriceOptimizer(real_model, real_feature_columns)
+    result = optimizer.optimize(BASE_FEATURES, price_min, price_max)
+
+    assert price_min <= result["optimal_price"] <= price_max
     assert result["expected_revenue"] >= REVENUE_RATIO * reference_max
