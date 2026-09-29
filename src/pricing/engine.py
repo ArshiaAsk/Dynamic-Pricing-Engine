@@ -33,76 +33,115 @@ class PricingEngine:
 
         self._last_reload_time = 0
         self._current_version = None
+        # Where the currently served model came from: "mlflow" (registry) or
+        # "local" (the committed joblib artifact). Exposed via /v1/health.
+        self._model_source = "local"
         self._lock = Lock()
 
         self.load_model(force=True)
 
+    @property
+    def model_source(self) -> str:
+        """Active model source: ``"mlflow"`` or ``"local"``."""
+        return self._model_source
+
+    @property
+    def model_version(self) -> Optional[str]:
+        """Active registry model version, or ``None`` when serving locally."""
+        return self._current_version
+
+    def _resolve_production(self, client):
+        """Resolve the production model to ``(version, model_uri)``.
+
+        Prefers the ``production`` alias (what ``scripts/promote_model.py``
+        writes), then falls back to the ``stage=Production`` tag. Returns
+        ``(None, None)`` when neither exists.
+        """
+        try:
+            model_version = client.get_model_version_by_alias(self.model_name, "production")
+            if model_version is not None:
+                return str(model_version.version), f"models:/{self.model_name}@production"
+        except Exception:
+            pass
+
+        versions = client.search_model_versions(
+            filter_string=f"name='{self.model_name}' and tags.stage='Production'",
+            order_by=["version_number DESC"],
+            max_results=1,
+        )
+        if versions:
+            version = versions[0]
+            return str(version.version), f"models:/{self.model_name}/{version.version}"
+        return None, None
+
     # Load model and features
     def load_model(self, force=False):
-        """Load or reload model from MLflow Production stage"""
+        """Load the MLflow production model, or fall back to the local artifact.
+
+        The fallback is never silent: when no production version/alias exists or
+        the registry is unreachable, this logs at ERROR and records
+        ``model_source == "local"`` so ``/v1/health`` exposes the degradation.
+        """
         with self._lock:
             current_time = time.time()
 
             if not force and (current_time - self._last_reload_time < self.reload_interval):
                 return
-            
+
+            self._model_source = "local"
+            self._current_version = None
+            loaded_from_registry = False
+
             try:
                 # MLflow is optional: import it lazily so the API can start and
                 # serve the local artifact when mlflow is unavailable or broken.
                 import mlflow
                 from mlflow.tracking import MlflowClient
 
+                # Bound the registry calls so an unreachable/misconfigured
+                # tracking server cannot hang the request path (CONVENTIONS
+                # rule 31). Users can still override these explicitly.
+                os.environ.setdefault("MLFLOW_HTTP_REQUEST_TIMEOUT", "5")
+                os.environ.setdefault("MLFLOW_HTTP_REQUEST_MAX_RETRIES", "1")
+
                 mlflow.set_tracking_uri(
                     os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
                 )
                 client = MlflowClient()
-                
-                # Use search_model_versions instead of deprecated get_latest_versions
-                versions = client.search_model_versions(
-                    filter_string=f"name='{self.model_name}' and tags.stage='Production'",
-                    order_by=["version_number DESC"],
-                    max_results=1
-                )
-                
-                # If no versions with stage tag found, try alias-based approach
-                if not versions:
-                    try:
-                        model_version = client.get_model_version_by_alias(self.model_name, "production")
-                        versions = [model_version]
-                    except Exception:
-                        versions = []
-                
-                if versions:
-                    version = versions[0].version
 
-                    if version != self._current_version:
-                        logger.info(f"Loading new model version: {version}")
-
-                        model_uri = f"models:/{self.model_name}/Production"
-                        self.model = mlflow.pyfunc.load_model(model_uri)
-
-                        self._current_version = version
-                        self._last_reload_time = current_time
-                    else:
-                        self._last_reload_time = current_time
+                version, model_uri = self._resolve_production(client)
+                if model_uri is not None:
+                    logger.info(f"Loading model version {version} from MLflow registry")
+                    self.model = mlflow.pyfunc.load_model(model_uri)
+                    self._current_version = version
+                    self._model_source = "mlflow"
+                    loaded_from_registry = True
                 else:
-                    logger.warning("No Production model found in mlflow. Falling back to local model.")
-                    self.model = joblib.load(self.model_path)
-                    self._last_reload_time = current_time
+                    logger.error(
+                        f"No Production version or 'production' alias found in the MLflow "
+                        f"registry for '{self.model_name}'. Falling back to the local "
+                        f"artifact {self.model_path}."
+                    )
 
             except Exception as e:
-                logger.warning(f"MLflow load failed. Falling back to local model. {e}")
+                logger.error(
+                    f"MLflow registry load failed for '{self.model_name}': {e}. "
+                    f"Falling back to the local artifact {self.model_path}."
+                )
+
+            if not loaded_from_registry:
                 self.model = joblib.load(self.model_path)
-                self._last_reload_time = current_time
+
+            self._last_reload_time = current_time
 
             # Load features
             with open(self.feature_path) as f:
                 self.feature_columns = json.load(f)
-        
+
             logger.info(
-                    f"Pricing engine ready | features: {len(self.feature_columns)} | "
-                    f"model_version: {self._current_version}"
-                )
+                f"Pricing engine ready | features: {len(self.feature_columns)} | "
+                f"source: {self._model_source} | model_version: {self._current_version}"
+            )
 
     def get_optimal_price(
         self, 

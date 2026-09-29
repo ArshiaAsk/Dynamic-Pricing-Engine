@@ -161,10 +161,18 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R5 — Correct and loud MLflow registry resolution (and fix `promote_model.py`)
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `src/pricing/engine.py:44-103`, `scripts/promote_model.py`, `src/api/router.py:111-120`
+- **Status:** done
+- **Files touched:** `src/pricing/engine.py`, `scripts/promote_model.py`, `src/monitoring/health_checker.py`, `src/api/router.py:111-120`, `tests/test_mlflow_registry.py` (new). Environment: `protobuf==4.25.9` + `setuptools<81` installed into the venv so `mlflow` 2.12.1 imports (see STATE.md).
 - **Acceptance criteria:** (a) When no Production stage/alias exists, the engine logs at **ERROR** (not WARNING) and exposes the active model source (e.g. `/v1/health` reports `checks.model.source == "local"`). (b) `scripts/promote_model.py` uses alias-based APIs (`set_registered_model_alias` / `set_model_version_tag`) with zero deprecated calls (`get_latest_versions`, `transition_model_version_stage`). (c) After running `promote_model.py`, the engine loads the registry model (non-null `model_version`) — verified by a test.
 - **Depends on:** R3
+- **Evidence (2026-09-29, isolated temp file-store registry; committed `models/demand_model.pkl`):**
+  - **Environment unblock (root-cause, not a workaround — CONVENTIONS rule 19):** `mlflow` 2.12.1 was unimportable (protobuf 7.35.1 removed `google.protobuf.service`; setuptools 82 removed `pkg_resources`). Installed `protobuf==4.25.9` + `setuptools<81` into the venv; `import mlflow` now succeeds. The engine bounds registry calls (`MLFLOW_HTTP_REQUEST_TIMEOUT=5`, `MLFLOW_HTTP_REQUEST_MAX_RETRIES=1` via `os.environ.setdefault`) so a dead tracking server fails fast instead of hanging the 30s request timeout (the pre-hardening behaviour was a 504 after ~194s — reproduced under a shim).
+  - **R5(a):** direct run against a registry with a registered version but **no** production alias →
+    `ERROR src.pricing.engine: No Production version or 'production' alias found in the MLflow registry for 'demand_forecasting_model'. Falling back to the local artifact models/demand_model.pkl.` → `source=local, version=None`. `GET /v1/health` → **HTTP 200**, `checks.model = {'status': 'ok', 'loaded': True, 'source': 'local'}`.
+  - **R5(b):** `grep -rn "get_latest_versions\|transition_model_version_stage" src/ scripts/` → **no matches**. `promote_model.py` uses `client.set_registered_model_alias(...)` + `client.set_model_version_tag(..., "stage", "Production")` and `search_model_versions` (not deprecated).
+  - **R5(c):** after `promote_model()` → `Loading model version 1 from MLflow registry` → engine `source=mlflow, version='1'` (non-null). Covered by `tests/test_mlflow_registry.py::test_engine_loads_registry_model_after_promotion`.
+  - **Tests:** `pytest tests/test_mlflow_registry.py -v` → **4 passed** (`test_engine_serves_local_when_no_production_alias`, `test_engine_loads_registry_model_after_promotion`, `test_promote_model_uses_alias_apis_only`, `test_health_exposes_active_model_source`); the module `pytest.importorskip("mlflow")`s so it skips cleanly if mlflow is absent. `pytest tests/` → **42 passed, 2 skipped**, 0 collection errors, no 504/hang.
+  - Note: with mlflow importable, `MLFLOW_TRACKING_URI` still defaults to `http://localhost:5000` (no server here), so the engine logs the ERROR and serves local — the intended R5 behaviour.
 
 ### R11 — Remove the hardcoded fake Advanced-tab response
 - **Priority:** P1

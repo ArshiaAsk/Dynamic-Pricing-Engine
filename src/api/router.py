@@ -111,7 +111,11 @@ def optimize_price(payload: PricingRequest):
 @router.get("/health")
 def health_check():
     """Comprehensive health check endpoint"""
-    health = health_checker.check_health(model=engine.model)
+    health = health_checker.check_health(
+        model=engine.model,
+        model_source=engine.model_source,
+        model_version=engine.model_version,
+    )
     
     # Return 503 if unhealthy
     if health['status'] != 'healthy':

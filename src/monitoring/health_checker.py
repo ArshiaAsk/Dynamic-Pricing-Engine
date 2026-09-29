@@ -19,10 +19,15 @@ class HealthChecker:
         self.error_count = 0
         self.last_prediction_time = None
     
-    def check_health(self, model=None) -> Dict:
+    def check_health(self, model=None, model_source=None, model_version=None) -> Dict:
         """
         Comprehensive health check
-        
+
+        Args:
+            model: The currently served model (or None).
+            model_source: Where the model came from — "mlflow" or "local".
+            model_version: The active registry model version, if any.
+
         Returns:
             Health status dictionary
         """
@@ -44,11 +49,18 @@ class HealthChecker:
                 health['checks']['model'] = {'status': 'ok', 'loaded': True}
             
             except Exception as e:
-                health['checks']['model'] = {'status': 'error', 'error': str(e)}
+                health['checks']['model'] = {'status': 'error', 'loaded': True, 'error': str(e)}
                 health['status'] = 'degraded'
         else:
             health['checks']['model'] = {'status': 'warning', 'loaded': False}
             health['status'] = 'degraded'
+
+        # Expose which artifact is actually serving (R5): a silent fallback must
+        # be observable from /v1/health.
+        if model_source is not None:
+            health['checks']['model']['source'] = model_source
+        if model_version is not None:
+            health['checks']['model']['version'] = model_version
         
         # System resources
         try:
