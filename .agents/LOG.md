@@ -17,6 +17,21 @@ Next session should start with:
 
 ---
 
+## 2026-09-29 — R6 acceptance criteria amended to require a revenue-ratio check (docs-only)
+
+Done:
+- **ROADMAP R6 amended (no code change).** Recorded the coarse-grid finding from R2 and extended R6's acceptance criteria: because D2/R6 make `grid_search` the sole served optimizer, R6 must also verify that, for `(30,80)`, `(70,110)`, `(10,200)`, `(100,120)`, `(30,120)`, the served `expected_revenue` is **≥ 0.99 ×** the maximum over a **≥ 901-point** grid computed at test time (CONVENTIONS rule 34) — not just HTTP 200/422 status codes. This requires raising/adapting `steps` to the bound width or reusing R1's dense-grid + refinement. Files touched now also lists `src/pricing/optimizer.py` as a possible home for the resolution fix.
+- **Note recorded (from R2, commit `ffc55fe`):** at the caller-chosen `steps=50` the fixed-width grid undershoots on wide bounds — observed revenue ratios vs the test-time 901-point reference: `(70,110)` 1.00018, `(30,80)` 0.98977, `(30,120)` 0.97145 (see the R2 evidence).
+
+Left open / blocked:
+- No roadmap item status changed; R6 remains `todo`. This was a documentation-only amendment to R6's criteria.
+- R7, R6, R4, R8/R9/R10 remain `todo`.
+
+Next session should start with:
+- R7 (real-model regression test locking in R1 + R2), then R6 (now with the revenue-ratio criterion), then R8/R9/R10. Work is on branch `task/R2-fix-grid-search`.
+
+---
+
 ## 2026-09-29 — R2 done: grid search builds the complete 31-column feature frame; API `grid_search` returns 200
 
 Done:
