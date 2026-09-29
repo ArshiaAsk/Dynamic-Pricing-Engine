@@ -368,4 +368,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-29, against commit 8791772 (R1, R2, R3, R7, R8 done; see `.agents/STATE.md`).
+Last updated: 2026-09-29, against commit efe4d5e (R1, R2, R3, R4, R5, R7, R8, R13 done; see `.agents/STATE.md`).

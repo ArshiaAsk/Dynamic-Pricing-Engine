@@ -17,6 +17,37 @@ Next session should start with:
 
 ---
 
+## 2026-09-29 — R4, R5, R13 done: shared feature builder; loud registry resolution + promote fix; health check by model type (3 code commits)
+
+Done:
+- **R4 implemented and verified. Code commit `946eae9`** ("refactor(pricing): single shared serving feature builder for both optimizers (R4)").
+  - New `src/pricing/features.py::build_serving_features(base_features, price, feature_columns=None)` is the **only** function that computes price-dependent serving features; both `src/pricing/optimizer.py` and `src/pricing/bayesian_optimizer.py` consume it and their duplicated `_build_features` (the R2 interim copy) is deleted. `grep -n "price_advantage_sin\|log_comp_price" src/pricing/optimizer.py src/pricing/bayesian_optimizer.py` → no matches.
+  - **Evidence:** `tests/test_serving_features.py` (new, 4 tests) drives both optimizers over a degenerate `[77.0,77.0]` range with a recording model and asserts the frames fed to `predict` have identical ordered 31 columns/values and identical predictions; `pytest tests/test_serving_features.py -v` → 4 passed. R2's `test_grid_optimizer_builds_complete_feature_frame` was retargeted to the shared builder (criterion unchanged). No behavioral drift: bayesian `(70,110)` → 77.372484/5951.359, grid `(70,110,50)` → 77.346939/5949.394 (same as R1/R2). Suite → **38 passed, 2 skipped**.
+- **R5 implemented and verified. Code commit `fdce6c4`** ("fix(pricing): loud, correct MLflow registry resolution + alias-based promote (R5)").
+  - **Environment root-cause fix:** `mlflow` 2.12.1 was unimportable (protobuf 7.35.1 dropped `google.protobuf.service`; setuptools 82 dropped `pkg_resources`). Installed `protobuf==4.25.9` + `setuptools<81` into the venv; `import mlflow` now succeeds (verified with a register → alias → `pyfunc.load_model` round-trip). `pip check` now flags protobuf for `tensorflow`/`opentelemetry-proto`, **neither imported anywhere in this repo** (grep). This was chosen over faking mlflow, per the owner's direction, so R5(c) and R13 are verified end-to-end.
+  - `engine.load_model`: resolves the `production` alias (fallback `tags.stage='Production'`), loads `models:/<name>@production`; when neither exists or the registry is unreachable it logs at **ERROR**, records `model_source="local"`, and exposes it via `/v1/health` (`checks.model.source`). Bounds registry calls (`MLFLOW_HTTP_REQUEST_TIMEOUT=5`, `_MAX_RETRIES=1`) so a dead `http://localhost:5000` fails fast instead of 504-ing after 30s (pre-hardening: 2 API tests 504, suite ~194s — reproduced under a protobuf shim).
+  - `scripts/promote_model.py` rewritten with `set_registered_model_alias` + `set_model_version_tag`, lazy mlflow import, default tracking URI = repo `mlruns/` file store. `grep -rn "get_latest_versions\|transition_model_version_stage" src/ scripts/` → no matches.
+  - **Evidence:** direct run — no alias → `ERROR ... No Production version or 'production' alias found ... Falling back to the local artifact` + `source=local, version=None`; `/v1/health` → HTTP 200, `checks.model = {'status':'ok','loaded':True,'source':'local'}`; after `promote_model()` → `source=mlflow, version='1'`. `tests/test_mlflow_registry.py` (new, 4 tests, isolated temp registry, `importorskip("mlflow")`) → 4 passed.
+- **R13 implemented and verified. Code commit `efe4d5e`** ("fix(api): health check probes the served model's real feature contract (R13)").
+  - `health_checker.py::_probe_model` derives the probe width from the served feature columns (`engine.feature_columns`, passed by `router.py`) instead of `getattr(model, "n_features_in_", 10)`; `grep` for the old expression → no matches.
+  - **Pre-fix failure reproduced (CONVENTIONS rule 18):** old probe on a pyfunc model → `{'status':'error','error':'Feature shape mismatch, expected: 31, got 10'}`, overall `degraded` (503); new probe → `ok`/`healthy`.
+  - **Evidence:** `tests/test_health_model_type.py` (new, 3 tests) asserts `GET /v1/health` → HTTP 200 + `checks.model.status == "ok"` for a native `XGBRegressor` and for an `mlflow.pyfunc` wrapper (built via `save_model`/`load_model`, no registry) → 3 passed.
+- **Cross-task re-check (per instruction):** R4's and R5's tests re-run together with R13 → `pytest tests/test_serving_features.py tests/test_optimizer_real.py tests/test_mlflow_registry.py tests/test_health_model_type.py -q` → **24 passed, 2 skipped**. Full suite `pytest tests/` → **45 passed, 2 skipped**, 0 collection errors.
+- **Docs updated once, after all three:** ROADMAP **R4/R5/R13 → done** with evidence (each in its own task commit); STATE.md — mlflow env note, §1 (grid, health, MLflow-versioning, error-handling, Optuna, unit-tests rows), §2 serving path + verified note, §5.6/§5.8/§5.12 marked fixed, `Last verified` → `efe4d5e`; this LOG entry.
+- **Commits:** three separate code commits, no amends, no combining: `946eae9` (R4), `fdce6c4` (R5), `efe4d5e` (R13), plus this docs commit. All on `development`; `main` was not moved.
+
+Left open / blocked:
+- **Environment caveat:** the venv now has `protobuf==4.25.9`, which conflicts with `tensorflow`/`opentelemetry-proto` per `pip check`. Neither is used by this repo; `requirements.txt` (R21) should record the pin so a fresh install reproduces it.
+- R6 (canonical `grid_search`, reject `"bayesian"` with 422, revenue-ratio criterion), R9, R10 remain `todo`. R4 did not unify the two optimizer *strategies* (that is R6/D2) — only their feature construction.
+- The R2 coarse-grid caveat on wide bounds is unchanged and is now an explicit R6 criterion.
+- **R7 must be re-run after R12** (R12 retrains `models/demand_model.pkl`, invalidating R7's test-time reference).
+- The repo's local `mlruns/` registry was touched by exploratory probes during this session (a `production` alias may have been set on version 2). `mlruns/` is gitignored, so no repo state changed; the tests themselves use isolated temp registries.
+
+Next session should start with:
+- R6 (now with the revenue-ratio criterion), then R9/R10. Update `tests/test_api.py`'s `"bayesian"` payload to `"grid_search"` as part of R9 once R6 rejects it.
+
+---
+
 ## 2026-09-29 — R7 and R8 done: real-model optimizer regression test; plain `pytest tests/` green (2 code commits)
 
 Done:
