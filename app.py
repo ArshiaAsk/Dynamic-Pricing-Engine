@@ -127,8 +127,8 @@ with tab1:
     
     optimization_method = st.selectbox(
         "Optimization Method",
-        ["bayesian", "grid_search"],
-        help="bayesian: Fast Bayesian optimization | grid_search: Exhaustive search"
+        ["grid_search", "grid"],
+        help="grid_search: exhaustive search over the price range (canonical) | grid: alias"
     )
     
     inventory_limit = st.number_input(
@@ -200,11 +200,11 @@ with tab1:
                     with result_col3:
                         st.metric(
                             "📊 Predicted Demand",
-                            f"{result['predicted_demand']:.0f} units"
+                            f"{result['expected_demand']:.0f} units"
                         )
                     
                     with result_col4:
-                        total_revenue = result['optimal_price'] * result['predicted_demand']
+                        total_revenue = result['optimal_price'] * result['expected_demand']
                         st.metric(
                             "💵 Est. Revenue",
                             f"${total_revenue:,.0f}"
@@ -224,10 +224,10 @@ with tab1:
                             ],
                             "Value": [
                                 f"${result['optimal_price']:.2f}",
-                                f"{result['predicted_demand']:.2f}",
+                                f"{result['expected_demand']:.2f}",
                                 f"${total_revenue:,.2f}",
-                                f"${cost * result['predicted_demand']:,.2f}",
-                                f"${(total_revenue - cost * result['predicted_demand']):,.2f}",
+                                f"${cost * result['expected_demand']:,.2f}",
+                                f"${(total_revenue - cost * result['expected_demand']):,.2f}",
                                 f"{((result['optimal_price'] - competitor_price) / competitor_price * 100):+.1f}%",
                                 optimization_method
                             ]
@@ -261,11 +261,11 @@ with tab2:
     
     with col2:
         st.warning("""
-        **Optimization Methods:**
-        - **Bayesian**: Fast, Gaussian Process-based optimization
-        - **Grid Search**: Exhaustive search over price range
+        **Optimization Method:**
+        - **grid_search**: exhaustive search over the price range (canonical)
+        - **grid**: alias for grid_search
         
-        Choose based on your needs for speed vs accuracy.
+        The API accepts only these two values.
         """)
     
     st.subheader("Request/Response Example")
@@ -370,7 +370,7 @@ with tab3:
                             "product_id": payload["product_id"],
                             "competitor_price": payload["competitor_price"],
                             "optimal_price": result["optimal_price"],
-                            "predicted_demand": result["predicted_demand"],
+                            "expected_demand": result["expected_demand"],
                             "price_change_%": ((result["optimal_price"] - payload["competitor_price"]) / payload["competitor_price"] * 100),
                         })
                 
@@ -408,7 +408,7 @@ with tab4:
     ### Key Features
     
     - **🤖 ML-Based Demand Forecasting**: XGBoost models predict future demand
-    - **💰 Profit Optimization**: Bayesian and grid search methods find optimal prices
+    - **💰 Profit Optimization**: Grid search over the price range finds the optimal price
     - **📊 Real-Time Data**: Considers competitor prices, seasonality, and historical trends
     - **🔒 Business Constraints**: Respects margins, inventory, and price ranges
     - **📈 Batch Processing**: Optimize multiple products simultaneously
@@ -425,7 +425,7 @@ with tab4:
     
     - **API Backend**: FastAPI with production-grade monitoring
     - **ML Models**: XGBoost for demand forecasting
-    - **Optimization**: Bayesian optimization or grid search
+    - **Optimization**: Vectorized grid search over the price range
     - **Frontend**: Streamlit UI for easy interaction
     - **Deployment**: Docker containerized for cloud platforms
     
