@@ -73,10 +73,17 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R3 — Make `mlflow` import lazy/optional so serving and tests start without it
 - **Priority:** P0
-- **Status:** todo
+- **Status:** done
 - **Files touched:** `src/pricing/engine.py:9`, `src/pricing/model_loader.py:1-2`, `src/utils/mlflow_tracking.py:1-2`, `src/api/server.py`
 - **Acceptance criteria:** In an environment where importing `mlflow` fails (or with `sys.modules["mlflow"] = None` forced), `python -c "import src.api.server"` exits 0, and `python -m src.api.server` serves `GET /v1/health` → HTTP 200 using the local pickle. No top-level unconditional `import mlflow` remains on the API import path. (Optional/lazy imports of heavy dependencies in production code are *required* — see CONVENTIONS rule 19.)
 - **Depends on:** none
+- **Evidence (2026-09-29, code commit `0ba7d5a`; `mlflow` is genuinely unimportable in this env — protobuf conflict):**
+  - `python -c "import src.api.server"` → `IMPORT_OK Dynamic Pricing API`, **exit 0**. Logged `MLflow load failed. Falling back to local model. cannot import name 'service' from 'google.protobuf'`.
+  - Forced-unavailable path: `python -c "import sys; sys.modules['mlflow']=None; sys.modules['mlflow.tracking']=None; import src.api.server"` → `IMPORT_OK_FORCED_NONE Dynamic Pricing API`, **exit 0**.
+  - `python -m src.api.server` (port 8123) → `curl /v1/health` → **HTTP 200**, body `{"status":"healthy",...,"checks":{"model":{"status":"ok","loaded":true}}}`; server log shows the local-pickle fallback was taken. (`server.py` needed no edit — it only reaches `mlflow` via `router` → `engine` → `model_loader`; those are now lazy.)
+  - No top-level unconditional `import mlflow` remains on the API import path: `grep -n "^import mlflow\|^from mlflow" src/` → no matches. The only remaining top-level mlflow imports are standalone scripts (`scripts/promote_model.py`, `scripts/train_with_tuning.py`), which are not on the API import path.
+  - Side effect (root-cause fix, not a test workaround — CONVENTIONS rule 19): a plain `pytest tests/` now collects and passes — **21 passed, exit 0, 0 collection errors** (previously aborted at collection on `tests/test_api.py`'s mlflow import). R8's remaining work (conftest/`pytest.ini`, R6/R9 contract updates) is unaffected; R8 stays `todo`.
+  - Existing suite unaffected: `pytest tests/ --ignore=tests/test_api.py -q` → 17 passed.
 
 ### R6 — One canonical search method name: `grid_search` (alias `grid`); legacy `"bayesian"` is rejected
 - **Priority:** P0
@@ -323,4 +330,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-29, against commit b21e45a (R1 done; see `.agents/STATE.md`).
+Last updated: 2026-09-29, against commit 0ba7d5a (R1, R3 done; see `.agents/STATE.md`).

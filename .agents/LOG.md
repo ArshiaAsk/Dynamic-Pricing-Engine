@@ -17,6 +17,32 @@ Next session should start with:
 
 ---
 
+## 2026-09-29 — R3 done: lazy/optional `mlflow` import; API and `pytest tests/` start without it
+
+Done:
+- **R3 implemented and verified. Code commit `0ba7d5a`** ("fix(pricing): import mlflow lazily so serving starts without it (R3)"), touching only `src/pricing/engine.py`, `src/pricing/model_loader.py`, `src/utils/mlflow_tracking.py`.
+  - `engine.py`: removed the top-level `import mlflow` / `from mlflow.tracking import MlflowClient`; moved them inside `load_model`'s existing try block (`engine.py:52-53`). When the import fails, the pre-existing `except Exception` fallback loads `models/demand_model.pkl` — behavior unchanged when mlflow is available.
+  - `model_loader.py`: removed top-level `import mlflow` / `import mlflow.xgboost`; moved them into `load_production_model` (`:7-8`). This module is on the API import path (`engine.py:11` imports it), which is why it had to be fixed too.
+  - `mlflow_tracking.py`: removed top-level imports; each `MlflowTracker` method now imports `mlflow` locally.
+  - `src/api/server.py` needed **no edit** — it only reaches mlflow transitively via `router → engine → model_loader`; the ROADMAP "files touched" entry for it is satisfied by making that path lazy.
+- **Verified against this revision's criteria (observed evidence):**
+  - `python -c "import src.api.server"` → `IMPORT_OK Dynamic Pricing API`, **exit 0**, with the real broken mlflow (protobuf: `cannot import name 'service' from 'google.protobuf'`); log shows the local-pickle fallback.
+  - Forced-unavailable: `python -c "import sys; sys.modules['mlflow']=None; sys.modules['mlflow.tracking']=None; import src.api.server"` → **exit 0**.
+  - `python -m src.api.server` (port 8123) → `curl /v1/health` → **HTTP 200** `{"status":"healthy",...,"checks":{"model":{"status":"ok","loaded":true}}}`.
+  - `grep -n "^import mlflow\|^from mlflow" src/` → **no matches**; only standalone scripts (`scripts/promote_model.py`, `scripts/train_with_tuning.py`) still import mlflow at top level, and neither is on the API import path.
+  - Existing suite unaffected: `pytest tests/ --ignore=tests/test_api.py -q` → **17 passed**.
+- **Side effect (root-cause fix, not a workaround — CONVENTIONS rule 19):** a plain `pytest tests/` now **collects and passes: 21 passed, exit 0, 0 collection errors**. R3 fixed the `tests/test_api.py:4` import at its root instead of hiding it with `--ignore`/config/conditional imports. R8 is left `todo` (its `conftest.py`/`pytest.ini` and the R6/R9 contract updates are still open; note `test_api.py` still posts the legacy `"bayesian"` method, which R6 will reject → R9 must update it).
+- Docs updated in the same session: ROADMAP **R3 → done** with the evidence above; STATE.md §1 (FastAPI row → CONFIRMED, unit-tests row → 21 passing), §2 (serving-path note: no mlflow stub needed), §3 (`load_production_model` line refs), §5.6 (marked fixed for the serving path), top "Broken" note, and the `Last verified` line → `0ba7d5a`.
+
+Left open / blocked:
+- `scripts/train_with_tuning.py` still imports `mlflow` at module top level (`:9-11`) and still cannot run here — out of R3's stated scope (not on the serving path); it remains a P1/R21-adjacent concern.
+- R2 (grid `KeyError`), R6 (`grid_search`/422), R7 (real-model regression test) remain `todo`. R8's acceptance is now met in practice (21 passed, 0 collection errors) but the item also names `tests/conftest.py` + `pytest.ini` and depends on R6/R9 for the contract updates, so it was **not** marked done.
+
+Next session should start with:
+- R2, then R7 (real-model regression test locking in R1 + R2); then R6, then R8/R9/R10. Workflow: branch from current `main`, prefer merge over amend once a branch exists (see the R1 branch-divergence incident).
+
+---
+
 ## 2026-09-29 — R1 done; branch-divergence incident (stale branch base) found and resolved
 
 Done:

@@ -11,7 +11,7 @@ tracing imports, and (where possible) running the code against the real committe
 **Verification environment (this machine):**
 - Python: `/home/arshiaask/projects/venv/bin/python` (3.12.3), cwd = repo root.
 - Present & working: xgboost 3.2.0, scikit-learn 1.9.0, scipy 1.17.1, pandas 2.3.3, fastapi 0.136.3, pydantic 2.13.4, optuna 4.8.0, psutil, joblib, pyarrow.
-- **Broken:** `mlflow` cannot be imported (protobuf conflict: `ImportError: cannot import name 'service' from 'google.protobuf'`). This is not a code bug per se, but it *does* break every entry point that imports `mlflow` at module top level — which includes the API and the "recommended" training script.
+- **Broken:** `mlflow` cannot be imported (protobuf conflict: `ImportError: cannot import name 'service' from 'google.protobuf'`). This is not a code bug per se. As of R3 (2026-09-29) the serving path imports `mlflow` lazily, so the API and `pytest tests/` start and serve from the local pickle without it; `scripts/train_with_tuning.py` still imports `mlflow` at module top level and fails to run.
 - Prior audit used as a cross-check: `audit_Dynamic-Pricing-Engine.md` in repo root (the `/mnt/user-data/uploads/audit_Dynamic-Pricing-Engine.md` path given in the task **does not exist**). That file has since been reviewed, judged superseded by this one, and **deleted** (2026-09-28); the corrections it prompted are recorded in §6.
 
 **Status legend:** `CONFIRMED` = real and works · `PARTIAL` = partially real / works with caveats · `FAKE-OR-DEAD` = exists but non-functional or never wired in · `NOT-FOUND` = claimed but absent.
@@ -34,7 +34,7 @@ tracing imports, and (where possible) running the code against the real committe
 | Model performance monitoring / degradation alerts | FAKE-OR-DEAD | `src/monitoring/model_monitor.py:122-204` | `calculate_performance_metrics` / `check_model_degradation` never imported. No actuals feedback loop exists. |
 | Prediction logging / audit trail | CONFIRMED | `src/monitoring/prediction_logger.py`; called at `src/api/router.py:72,96`; outputs in `logs/predictions/*.jsonl` | Real JSONL audit log. But all 8 log files present locally (untracked — `logs/` is gitignored, so they are **not** committed) contain **only** `type: "error"` entries (27 total, 0 successful optimizations) — evidence the API was never used successfully end-to-end. |
 | Comprehensive metrics (MAE/RMSE/R²/MAPE/directional) | CONFIRMED | `src/training/evaluate.py:15-98`; values in `reports/training_metrics.json` | All computed for real. |
-| FastAPI service + Swagger/ReDoc | CONFIRMED (with env caveat) | `src/api/server.py:35-41` (`docs_url="/docs"`, `redoc_url="/redoc"`); router mounted at `/v1` (`server.py:74`) | Works (verified via TestClient with mlflow stubbed). **Cannot start in this env** because `src/pricing/engine.py:9` imports `mlflow` unconditionally → `ImportError`. |
+| FastAPI service + Swagger/ReDoc | CONFIRMED | `src/api/server.py:35-41` (`docs_url="/docs"`, `redoc_url="/redoc"`); router mounted at `/v1` (`server.py:74`) | Works with the real (broken) `mlflow`: R3 (2026-09-29) made the `mlflow` import lazy (`src/pricing/engine.py:52-53`), so `python -m src.api.server` starts and `GET /v1/health` → 200 on the local pickle — no stub needed. |
 | Health / readiness / liveness endpoints | PARTIAL (buggy) | `src/api/router.py:111-137`; `src/monitoring/health_checker.py` | Real endpoints (verified 200). Bug: model check uses `getattr(model, "n_features_in_", 10)` and predicts on `np.zeros((1,10))` (`health_checker.py:41-43`). An MLflow `pyfunc` model has no `n_features_in_` → wrong width → predict raises → status `degraded` → `/v1/health` returns **503**. |
 | `/metrics` endpoint | PARTIAL | `src/api/router.py:140-146` | Returns custom JSON (`health` + `predictions`), **not** Prometheus exposition format. |
 | Prometheus integration | FAKE-OR-DEAD | `requirements.txt:38` declares `prometheus-client`; zero imports in repo | `src/monitoring/metrics_tracker.py` is a hand-rolled in-memory dict that is itself never imported. No instrumentation. |
@@ -47,9 +47,9 @@ tracing imports, and (where possible) running the code against the real committe
 | Nginx reverse proxy | FAKE-OR-DEAD | `docker-compose.prod.yml:53-54` mounts `./nginx/nginx.conf` and `./nginx/ssl` | `nginx/` **does not exist**. `docker-compose -f docker-compose.prod.yml up` fails on the missing bind mounts. No nginx config anywhere. |
 | Automated AWS EC2 deployment + rollback | NOT-FOUND | `README.md:200-218` | `scripts/deploy.sh` and `scripts/pre_deploy_check.sh` are **missing**. Only `health_check.sh`, `metrics.sh`, `logs.sh`, `load_test.sh`, `backup_database.sh`, `restore_database.sh`, `run_smoke_tests.sh` exist. |
 | CI/CD (test automation, image builds, smoke tests) | NOT-FOUND | no `.github/` directory, no workflow files | Dead CI metadata code remains at `scripts/train_with_tuning.py:28-35` (`GITHUB_RUN_ID`, etc.). |
-| Unit / integration / smoke tests | PARTIAL | `tests/` | `pytest tests/` **aborts at collection** because `tests/test_api.py:4` imports the mlflow-dependent API. With `--ignore=tests/test_api.py`: **17 pass**. `pytest tests/smoke_tests.py` collects **0** (class `SmokeTestRunner` holds methods, not module-level `test_*`). `tests/test_optimizer.py:18` mocks a *smooth* model, so it cannot detect the broken real optimizer. `tests/test_integration.py` exercises the **dead** `IntegratedPricingOptimizer`. Stored coverage: **69%** (`.coverage`, dated Jun 6). |
+| Unit / integration / smoke tests | PARTIAL | `tests/` | As of R3 (2026-09-29) a plain `pytest tests/` **collects and passes: 21 passed, 0 collection errors** (the `tests/test_api.py:4` mlflow import is fixed). `pytest tests/smoke_tests.py` collects **0** (class `SmokeTestRunner` holds methods, not module-level `test_*`). `tests/test_optimizer.py:18` mocks a *smooth* model, so it cannot detect the broken real optimizer. `tests/test_integration.py` exercises the **dead** `IntegratedPricingOptimizer`. Stored coverage: **69%** (`.coverage`, dated Jun 6). |
 | SQLite DB + backup/restore, 7-day retention | PARTIAL | `scripts/backup_database.sh`, `scripts/restore_database.sh`, `data.db` | `data.db` exists with a populated `sales_data` table (18,250 rows), but **no `src/` code reads or writes it** (no `DATABASE_URL` usage outside shell scripts). Backup/restore scripts are real; retention defaults to 7 days. |
-| MLflow model versioning | PARTIAL / dead at serve time | `src/utils/mlflow_tracking.py`, `scripts/train_with_tuning.py:136-140`, `src/pricing/engine.py:44-94`, `mlruns/`, `mlflow.db` | Registry has `demand_forecasting_model` v1 & v2, but **both have `current_stage: None` and `aliases: []`** (`mlruns/models/demand_forecasting_model/version-*/meta.yaml`). So `search_model_versions(... tags.stage='Production')` and the alias fallback both return nothing → the engine **always** falls back to the local pickle. `scripts/promote_model.py:12-29` uses deprecated `get_latest_versions`/`transition_model_version_stage` and promotes to **Staging**, never Production. README lists MLflow under "Future Enhancements" (`README.md:419`) while the code already depends on it. |
+| MLflow model versioning | PARTIAL / dead at serve time | `src/utils/mlflow_tracking.py`, `scripts/train_with_tuning.py:136-140`, `src/pricing/engine.py:49-96`, `mlruns/`, `mlflow.db` | Registry has `demand_forecasting_model` v1 & v2, but **both have `current_stage: None` and `aliases: []`** (`mlruns/models/demand_forecasting_model/version-*/meta.yaml`). So `search_model_versions(... tags.stage='Production')` and the alias fallback both return nothing → the engine **always** falls back to the local pickle. `scripts/promote_model.py:12-29` uses deprecated `get_latest_versions`/`transition_model_version_stage` and promotes to **Staging**, never Production. README lists MLflow under "Future Enhancements" (`README.md:419`) while the code already depends on it. |
 | Streamlit UI (Quick/Advanced/Batch) | PARTIAL / broken integration | `app.py` | UI renders but cannot display a result from the current API: it reads `result['predicted_demand']` (`app.py:203,207,227,229,230,373`) while the API returns `expected_demand` (`src/api/schemas.py:83`) → `KeyError` swallowed by the broad `except` at `app.py:242`. It also sends `"grid_search"` (`app.py:130`) which the engine rejects (`engine.py:155-156` → 500). The Advanced tab shows a hardcoded fake response (`app.py:306-316`) with fields (`confidence_interval`, `optimization_metadata`, `time_ms`) the API never returns. |
 | Hugging Face Spaces deployment | PARTIAL | `Dockerfile.hf`, `start.sh` | Real Docker Space setup. Fragile: `start.sh:23-25` loops forever waiting for `/v1/health` to return 2xx with **no retry cap**; if health returns 503 the container hangs and Streamlit never starts. (The nested HF repo mentioned by the prior audit is **no longer present**.) |
 | "Enterprise security" / non-root containers | PARTIAL | `Dockerfile.prod:36` (`USER appuser`) | Non-root is real; rate limiting + validation are real. But: no authN/authZ, no TLS (nginx missing), CORS defaults to `*` (`src/api/server.py:50`). |
@@ -92,8 +92,8 @@ Verified facts:
 uvicorn src.api.server:app
   → src/api/server.py:35  FastAPI app; middleware; router mounted at /v1
   → src/api/router.py:23  PricingEngine(config)  (module-import time)
-        → src/pricing/engine.py:41  load_model(force=True)
-              tries MLflow registry (engine.py:52-90) → no Production version/alias
+        → src/pricing/engine.py:38  load_model(force=True)
+              lazily imports mlflow (engine.py:49-96) → registry has no Production version/alias
               → joblib.load(models/demand_model.pkl)     ← ALWAYS taken with current state
               → loads models/features.json
   → POST /v1/optimize-price  (src/api/router.py:29)
@@ -109,7 +109,7 @@ uvicorn src.api.server:app
         → PricingResponse(**result)  (schemas.py:79; extra key `model_version` ignored by Pydantic)
 ```
 
-Verified: `GET /v1/health` → 200; `GET /v1/health/ready` → 200; `POST /v1/optimize-price` (bayesian, `price_min=70, price_max=110`) → 200 with `optimal_price=77.3725, expected_demand=76.918, expected_revenue=5951.36, optimization_success=True, optimization_iterations=2403` (re-verified 2026-09-29 after R1). The serving path was exercised via FastAPI `TestClient` with `mlflow` stubbed (because the real import is broken here).
+Verified: `GET /v1/health` → 200; `GET /v1/health/ready` → 200; `POST /v1/optimize-price` (bayesian, `price_min=70, price_max=110`) → 200 with `optimal_price=77.3725, expected_demand=76.918, expected_revenue=5951.36, optimization_success=True, optimization_iterations=2403` (re-verified 2026-09-29 after R1). The serving path now runs against the real (broken) `mlflow` with no stub — R3 (2026-09-29) made the import lazy, so `python -m src.api.server` → `GET /v1/health` → 200 on the local pickle, and a plain `pytest tests/` collects and passes (21).
 
 ### Frontend path
 `app.py` (Streamlit) → HTTP `POST {api_url}/v1/optimize-price`. Broken contract as noted in §1 (reads `predicted_demand`, sends `grid_search`).
@@ -125,7 +125,7 @@ Modules/classes/functions defined but **never imported by the real running path*
 | `IntegratedPricingOptimizer` | `src/pricing/integrated_optimizer.py` | Only `tests/test_integration.py:7` |
 | `FeatureTransformer` | `src/features/transformer.py` | Only `integrated_optimizer.py:6` + `tests/test_integration.py:6` |
 | `RevenueCalculator` | `src/pricing/revenue.py` | Nothing (zero references) |
-| `load_production_model` | `src/pricing/model_loader.py:7` | Imported at `src/pricing/engine.py:14` but **never called** |
+| `load_production_model` | `src/pricing/model_loader.py:4` | Imported at `src/pricing/engine.py:11` but **never called** |
 | demo script | `src/pricing/optimize.py` | Nothing |
 | `MetricsTracker`, `Timer`, `get_metrics_tracker` | `src/monitoring/metrics_tracker.py` | Nothing |
 | `ModelMonitor` (`calculate_drift`, `calculate_performance_metrics`, `check_model_degradation`) | `src/monitoring/model_monitor.py` | Nothing |
@@ -189,7 +189,7 @@ Keys read by code but **absent** from config.yaml (rely on `.get` defaults): `pr
 3. ~~**"Bayesian" optimizer returns a bound or midpoint, never the true optimum.**~~ **Fixed 2026-09-29 (ROADMAP R1):** replaced the `scipy` L-BFGS-B call with a derivative-free dense price grid + local refinement. It now returns the true revenue optimum with `optimization_success=True`; for `(10,200)`/`(100,120)` the optimum is genuinely the upper bound. The method label is still misleading (DECISIONS D2 / R6).
 4. **README's curl example 404s** — `README.md:133` omits `/v1`.
 5. **`python src/training/train.py` fails** — `ModuleNotFoundError: No module named 'src'` (`README.md:106`).
-6. **mlflow-coupled entry points fail to import in this environment:** `python -m src.api.server`, `scripts/train_with_tuning.py`, and `tests/test_api.py` all die with `ImportError: cannot import name 'service' from 'google.protobuf'`. Consequently `pytest tests/` **aborts at collection** (0 tests run); only `pytest tests/ --ignore=tests/test_api.py` yields the 17 passing tests.
+6. ~~**mlflow-coupled entry points fail to import in this environment.**~~ **Fixed for the serving path 2026-09-29 (ROADMAP R3, commit `0ba7d5a`):** `mlflow` is now imported lazily, so `python -m src.api.server` and `tests/test_api.py` start fine and a plain `pytest tests/` collects and passes (21). `scripts/train_with_tuning.py` still imports `mlflow` at module top level and dies with `ImportError: cannot import name 'service' from 'google.protobuf'`.
 7. **Streamlit cannot render a successful API response** — reads `result['predicted_demand']` (`app.py:203,207,227,229,230,373`) but API returns `expected_demand`; error swallowed by `except Exception` at `app.py:242`.
 8. **Health check false-degrades with a registry model.** `health_checker.py:41-43` assumes `n_features_in_` (default 10) and feeds `np.zeros((1,10))`; an MLflow `pyfunc` wrapper lacks that attribute → predict raises → `/v1/health` returns 503.
 9. **HF container can hang forever.** `start.sh:23-25` waits indefinitely for `/v1/health` 2xx; a 503 response loops with no retry limit and Streamlit never starts.
@@ -223,4 +223,4 @@ conclusions, with these corrections:
 
 ---
 
-Last verified: 2026-09-29, against commit b21e45a (ROADMAP R1 optimizer fix); all other rows were last verified against c32841f.
+Last verified: 2026-09-29, against commit 0ba7d5a (ROADMAP R1 optimizer fix + R3 lazy mlflow import); all other rows were last verified against c32841f.
