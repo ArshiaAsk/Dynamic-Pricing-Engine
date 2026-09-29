@@ -152,17 +152,27 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R9 — API contract + grid-path integration test
 - **Priority:** P0
-- **Status:** todo
+- **Status:** done
 - **Files touched:** `tests/test_api.py`
 - **Acceptance criteria:** Test asserts HTTP 200 for both `grid_search` and `grid`, and HTTP 422 for the legacy `"bayesian"` method; the response contains `optimal_price`, `expected_demand`, `expected_revenue`, `optimization_method`; the price is within the requested `[price_min, price_max]`; `grid_search` revenue ≥ 0.99 × the vectorized optimum computed **at test time with the same model and bounds** (no hardcoded reference).
 - **Depends on:** R6, R8
+- **Evidence (2026-09-29, commit `bc2f674`, committed `models/demand_model.pkl`; reference computed at test time per CONVENTIONS rule 34):**
+  - **`tests/test_api.py::test_grid_path_response_contract`** — `grid_search` and `grid` → **HTTP 200**; the body contains `optimal_price`, `expected_demand`, `expected_revenue`, `optimization_method`; the method is echoed; `70 ≤ optimal_price ≤ 110`; the body validates against `PricingResponse`. Legacy `"bayesian"` → **HTTP 422**.
+  - **`tests/test_api.py::test_grid_path_reaches_reference_optimum`** — served `grid_search` `expected_revenue` **5950.3983** vs a test-time 901-point reference max **5948.3471** (ratio **1.00034 ≥ 0.99**). The reference is built from the *served* model (`engine.model`) and the requested bounds through an independent oracle feature builder (`_oracle_serving_features`, deliberately not the shared `build_serving_features`), so it is not circular and contains no hardcoded model-derived number.
+  - **Observed (TestClient):** `grid_search` → 200 `optimal_price=77.3600, expected_demand=76.9183, expected_revenue=5950.3983`; `grid` → 200 same; `bayesian` → 422.
+  - **Suite:** `pytest tests/test_api.py` → **9 passed**; full `pytest tests/` → **60 passed, 2 skipped**, 0 collection errors.
 
 ### R10 — Fix the Streamlit ↔ API response contract
 - **Priority:** P0
-- **Status:** todo
+- **Status:** done
 - **Files touched:** `app.py:203,207,227,229,230,373`, `app.py:369-375`
 - **Acceptance criteria:** With the API running, the Quick tab renders Optimal Price / Predicted Demand / Est. Revenue with no `KeyError`. `app.py` sends the canonical `grid_search` method (not a rejected legacy string). A test asserts `set(keys read by app.py) ⊆ set(PricingResponse.model_fields)`, so any future field rename fails CI.
 - **Depends on:** R6
+- **Evidence (2026-09-29, commit `bfa06eb`, live API on `:8000`):**
+  - **Field fix:** `app.py` now reads `expected_demand` (Quick-tab metrics, details table, batch results). `grep -n "predicted_demand" app.py` → no field reads remain.
+  - **Method fix:** the selectbox offers `["grid_search", "grid"]` only; the rejected legacy `"bayesian"` is gone, and the Advanced/About copy no longer advertises Bayesian optimization.
+  - **Rendering (AppTest, live API):** ran `app.py` via `streamlit.testing.v1.AppTest`, clicked "🚀 Optimize Price" → no `at.exception`, no `st.error`; metrics rendered `💰 Optimal Price $77.36`, `📈 Profit Margin 22.4%`, `📊 Predicted Demand 77 units`, `💵 Est. Revenue $5,930`.
+  - **Contract test (new `tests/test_streamlit_contract.py`):** `test_app_reads_only_pricing_response_fields` parses `app.py` as source and asserts every `result[...]` key is a `PricingResponse` field (and that `expected_demand` is read, `predicted_demand` is not); `test_app_offers_only_accepted_optimization_methods` asserts the selectbox options ⊆ the accepted `Literal` and exclude `"bayesian"`. `pytest tests/test_streamlit_contract.py` → **4 passed** at this commit.
 
 ---
 
@@ -202,10 +212,15 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R11 — Remove the hardcoded fake Advanced-tab response
 - **Priority:** P1
-- **Status:** todo
+- **Status:** done
 - **Files touched:** `app.py:304-316`
 - **Acceptance criteria:** `grep -n "confidence_interval\|optimization_metadata" app.py` returns nothing. The Advanced tab shows either the live OpenAPI schema (`/openapi.json`) or a real response from a live call. A test asserts those fabricated keys never appear in the UI source.
 - **Depends on:** none
+- **Evidence (2026-09-29, commit `b7abaff`, live API on `:8000`):**
+  - `grep -n "confidence_interval\|optimization_metadata" app.py` → **no matches** (the `example_response` dict is removed).
+  - The Advanced tab now fetches the running API's `/openapi.json` and renders the live `PricingResponse` schema; if the API is unreachable it shows an informational message instead of invented data.
+  - **AppTest:** the Advanced tab renders the live schema — properties `optimal_price`, `expected_demand`, `expected_revenue`, `optimization_method`, `profit_margin`, `total_profit`, …; no `confidence_interval`/`optimization_metadata`.
+  - **Test:** new `tests/test_streamlit_contract.py::test_app_contains_no_fabricated_response_keys` asserts `confidence_interval`, `optimization_metadata`, and `example_response` never appear in the UI source. `pytest tests/test_streamlit_contract.py` → **5 passed** at this commit.
 
 ### R12 — Honest temporal train/validation split + `product_id` handling
 - **Priority:** P1
@@ -394,4 +409,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-29, against commit b48d18a (R1, R2, R3, R4, R5, R6, R7, R8, R13 done; see `.agents/STATE.md`).
+Last updated: 2026-09-29, against commit bc2f674 (R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R13 done; see `.agents/STATE.md`).

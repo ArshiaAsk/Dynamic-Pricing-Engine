@@ -17,6 +17,36 @@ Next session should start with:
 
 ---
 
+## 2026-09-29 — R10, R11, R9 done: Streamlit↔API contract, fake Advanced-tab response removed, API contract + grid-path test (3 code commits)
+
+Done:
+- **R10 implemented and verified. Code commit `bfa06eb`** ("fix(ui): align Streamlit response contract with the API (R10)"), touching `app.py` and `tests/test_streamlit_contract.py` (new).
+  - `app.py` now reads `expected_demand` (Quick-tab metrics, details table, batch results) instead of `predicted_demand`, which the API never returned — that mismatch was the `KeyError` swallowed by the broad `except` (STATE.md §5.7).
+  - The method selectbox offers `["grid_search", "grid"]` only (the rejected legacy `"bayesian"` is gone); the Advanced/About copy no longer advertises Bayesian optimization (D2/rule 24).
+  - **Rendering evidence (live API on `:8000`):** ran `app.py` via `streamlit.testing.v1.AppTest`, clicked "🚀 Optimize Price" → no `at.exception`, no `st.error`; metrics rendered `💰 Optimal Price $77.36`, `📈 Profit Margin 22.4%`, `📊 Predicted Demand 77 units`, `💵 Est. Revenue $5,930`.
+  - **Contract test:** `tests/test_streamlit_contract.py` parses `app.py` as source (importing it would execute the Streamlit script) and asserts every `result[...]` key is a `PricingResponse` field (and that `expected_demand` is read, `predicted_demand` is not), and that the selectbox options ⊆ the accepted `Literal` and exclude `"bayesian"`. `pytest tests/test_streamlit_contract.py` → **4 passed** at this commit.
+- **R11 implemented and verified. Code commit `b7abaff`** ("fix(ui): remove fabricated Advanced-tab response, show live schema (R11)"), touching `app.py` and `tests/test_streamlit_contract.py`.
+  - Removed the hardcoded `example_response` (`confidence_interval`, `optimization_metadata`, `time_ms`) — a fabricated payload presented as a response (rule 25). `grep -n "confidence_interval\|optimization_metadata" app.py` → **no matches**.
+  - The Advanced tab now fetches the running API's `/openapi.json` and renders the live `PricingResponse` schema; when the API is unreachable it shows an informational message instead of invented data.
+  - **Evidence:** `AppTest` renders the live schema (properties `optimal_price`, `expected_demand`, `expected_revenue`, `optimization_method`, `profit_margin`, `total_profit`, …; no fabricated keys). New `test_app_contains_no_fabricated_response_keys` asserts the source contains none of `confidence_interval` / `optimization_metadata` / `example_response`. `pytest tests/test_streamlit_contract.py` → **5 passed**.
+- **R9 implemented and verified. Code commit `bc2f674`** ("test(api): contract + grid-path integration test through HTTP (R9)"), touching `tests/test_api.py`.
+  - `test_grid_path_response_contract`: `grid_search` and `grid` → **HTTP 200** with `optimal_price`, `expected_demand`, `expected_revenue`, `optimization_method`; the method is echoed; `70 ≤ optimal_price ≤ 110`; the body validates against `PricingResponse`; `"bayesian"` → **HTTP 422**.
+  - `test_grid_path_reaches_reference_optimum`: served `grid_search` `expected_revenue` **5950.3983** vs a test-time **901-point** reference max **5948.3471** (ratio **1.00034 ≥ 0.99**). The reference is computed from the *served* model (`engine.model`) and the requested bounds through an independent oracle feature builder — deliberately not the shared `build_serving_features` — so it is not circular and hardcodes no model-derived number (rule 34).
+  - **Suite:** `pytest tests/test_api.py` → **9 passed**; full `pytest tests/` → **60 passed, 2 skipped**, 0 collection errors (was 53+2 after R6). Only post-summary noise is the pre-existing `PredictionLogger.__del__` shutdown `ImportError` (STATE §5.11 / R17).
+- **Docs updated once, after all three:** ROADMAP **R9/R10/R11 → done** with the evidence above and the `Last updated` line → `bc2f674`; STATE.md §1 Streamlit row → CONFIRMED (fixed R10/R11) and unit-tests row → 60 passed, §2 frontend path rewritten, §5.7 marked fixed, `Last verified` → `bc2f674`; CONVENTIONS rules 25 and 29 → `enforced` (both now backed by `tests/test_streamlit_contract.py`); this LOG entry.
+- **Commits:** three separate code commits, no amends, no combining: `bfa06eb` (R10), `b7abaff` (R11), `bc2f674` (R9), plus this docs commit. All on `main` as requested.
+
+Left open / blocked:
+- The full suite is green (**60 passed, 2 skipped**); R7 must still be **re-run after R12** (R12 retrains `models/demand_model.pkl`, invalidating R7's test-time reference — R9's reference is likewise recomputed at test time, so it too is retrain-safe).
+- The Batch tab uses the corrected `expected_demand` field but was not exercised end-to-end (no CSV upload in the AppTest); the field contract is covered by the source-parse test.
+- `README.md:158,333`, `scripts/load_test.sh:46`, and `tests/smoke_tests.py:100,148` still carry the legacy `"bayesian"` string (R23/R14 own those; `smoke_tests.py` collects 0 tests so the suite is unaffected).
+- Remaining P0 is empty now; next P1 items include R12 (temporal split + `product_id`), R14–R26.
+
+Next session should start with:
+- R12 (honest temporal split + `product_id` handling) and **re-run R7 after it**. Or R14 (smoke tests) / R15 (drift) — see `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-09-29 — R6 done: canonical `grid_search` (alias `grid`), legacy `"bayesian"` → HTTP 422, adaptive grid resolution (1 code commit)
 
 Done:
