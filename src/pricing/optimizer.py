@@ -8,6 +8,47 @@ class PriceOptimizer:
         self.model = model
         self.feature_columns = feature_columns
 
+    def _build_features(self, base_features, price):
+        """
+        Build the complete price-dependent feature frame for a candidate price.
+
+        Mirrors ``BayesianPriceOptimizer._build_features`` so the grid search
+        selects the same 31 columns the model was trained on. Extracting a single
+        shared serving builder is ROADMAP R4; this is the interim in-place fix.
+        """
+        features = base_features.copy()
+
+        features["price"] = price
+
+        # Price ratio features
+        if "competitor_price" in features:
+            comp_price = features["competitor_price"]
+            features["price_ratio"] = price / comp_price if comp_price > 0 else 1.0
+            features["price_diff_pct"] = (price - comp_price) / comp_price if comp_price > 0 else 0.0
+
+        # Interaction with seasonality
+        if "sin_annual" in features:
+            features["price_ratio_sin"] = features.get("price_ratio", 1.0) * features["sin_annual"]
+        if "cos_annual" in features:
+            features["price_ratio_cos"] = features.get("price_ratio", 1.0) * features["cos_annual"]
+        if "competitor_price" in features:
+            comp_price = features["competitor_price"]
+            features["price_advantage"] = (comp_price - price) / comp_price if comp_price > 0 else 0.0
+            features["log_comp_price"] = float(np.log1p(comp_price)) if comp_price >= 0 else 0.0
+        features["log_price"] = float(np.log1p(price)) if price >= 0 else 0.0
+        if "sin_annual" in features:
+            features["price_advantage_sin"] = features.get("price_advantage", 0.0) * features["sin_annual"]
+
+        # In API inference there is no short-term price history, so fill derived deltas/rolls
+        # with stable defaults rather than failing column selection.
+        features.setdefault("price_change_1d", 0.0)
+        features.setdefault("price_change_7d", 0.0)
+        features.setdefault("roll_mean_price_7", price)
+        features.setdefault("roll_mean_price_14", price)
+        features.setdefault("roll_mean_price_28", price)
+
+        return features
+
     def optimize(self, base_features, price_min, price_max, steps=50):
         prices = np.linspace(price_min, price_max, steps)
 
@@ -16,13 +57,7 @@ class PriceOptimizer:
         best_demand = None
 
         for p in prices:
-            features = base_features.copy()
-
-            features["price"] = p
-            features["price_ratio"] = p / features["competitor_price"]
-            features["price_diff_pct"] = (p - features["competitor_price"]) / features["competitor_price"]
-            features["price_ratio_sin"] = features["price_ratio"] * features["sin_annual"]
-            features["price_ratio_cos"] = features["price_ratio"] * features["cos_annual"]
+            features = self._build_features(base_features, p)
 
             # Convert to DataFrame for model prediction
             X = pd.DataFrame([features])[self.feature_columns]

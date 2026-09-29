@@ -119,7 +119,7 @@ class PricingEngine:
             base_features: Base feature dictionary
             price_min: Minimum price
             price_max: Maximum price
-            method: "bayesian" or "grid" (default: bayesian)
+            method: "bayesian", "grid", or "grid_search" (default: bayesian)
             **kwargs: Additional arguments for optimizer
             
         Returns:
@@ -149,7 +149,7 @@ class PricingEngine:
                     inventory_limit=kwargs.get("inventory_limit")
                 )
         
-        elif method == "grid":
+        elif method in ("grid", "grid_search"):
             optimizer = PriceOptimizer(self.model, self.feature_columns)
             steps = kwargs.get("steps", 50)
             result = optimizer.optimize(base_features, price_min, price_max, steps)
