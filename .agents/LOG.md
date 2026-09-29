@@ -28,7 +28,8 @@ Done:
   - Direct: `optimize(base, 70, 110, 50)` → `optimal_price=77.3469`, `expected_demand=76.9183`, `expected_revenue=5949.394`; test-time 901-point reference max revenue `5948.347`; ratio `1.00018 ≥ 0.99`; price within `[70,110]`; no exception.
   - API: `python -m src.api.server` (port 8137) → `GET /v1/health` **200**; `POST /v1/optimize-price` `optimization_method="grid_search"` → **HTTP 200** (`optimal_price=77.3469, expected_revenue=5949.394, optimization_method="grid_search"`); `"grid"` → **HTTP 200** too. The 9-column KeyError no longer occurs (was HTTP 500).
   - `pytest tests/ -q` → **21 passed**.
-- Docs updated in the same session: ROADMAP **R2 → done** with the evidence above; STATE.md §1 grid row → CONFIRMED, §2 serving-path dispatch, §5.1 marked fixed, `Last verified` → `ffc55fe`.
+- Docs updated in the same session: ROADMAP **R2 → done** with the evidence above; STATE.md §1 grid row → CONFIRMED, §2 serving-path dispatch, §5.1 marked fixed, §5.2 and the Streamlit row corrected (the engine now accepts `grid_search`), `Last verified` → `ffc55fe`.
+- **Branch:** both commits (`ffc55fe` code, docs) are on `task/R2-fix-grid-search`, 2 commits ahead of `main` (`0adb4e3`); `main` was deliberately **not** moved this session.
 
 Left open / blocked:
 - **Caveat (outside R2's stated criterion, recorded honestly):** at the caller-chosen `steps=50` the fixed-width grid can undershoot on wide bounds — observed ratios vs the test-time 901-point reference: `(70,110)` 1.00018 ✓, `(30,80)` 0.98977, `(30,120)` 0.97145. This is inherent to a 50-point grid on a piecewise-constant revenue curve with a narrow peak, not the feature-frame bug R2 fixes. R2's criterion is `(70,110)` and it passes. A dense grid + refinement (as in R1) or a higher default resolution would close the gap; not in R2's scope.
