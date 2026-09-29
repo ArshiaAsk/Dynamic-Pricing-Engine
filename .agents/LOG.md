@@ -41,7 +41,7 @@ Left open / blocked:
 - R6 (canonical `grid_search`, reject `"bayesian"` with 422, revenue-ratio criterion), R9, R10 remain `todo`. R4 did not unify the two optimizer *strategies* (that is R6/D2) — only their feature construction.
 - The R2 coarse-grid caveat on wide bounds is unchanged and is now an explicit R6 criterion.
 - **R7 must be re-run after R12** (R12 retrains `models/demand_model.pkl`, invalidating R7's test-time reference).
-- The repo's local `mlruns/` registry was touched by exploratory probes during this session (a `production` alias may have been set on version 2). `mlruns/` is gitignored, so no repo state changed; the tests themselves use isolated temp registries.
+- The repo's local `mlruns/` registry was touched by exploratory probes during this session (a `production` alias and a `stage=Production` tag were set on version 2). Both were removed afterwards, restoring it to `aliases: []` / no tags / `current_stage: None` for both versions. `mlruns/` is gitignored, so no repo state changed; the tests themselves use isolated temp registries.
 
 Next session should start with:
 - R6 (now with the revenue-ratio criterion), then R9/R10. Update `tests/test_api.py`'s `"bayesian"` payload to `"grid_search"` as part of R9 once R6 rejects it.
