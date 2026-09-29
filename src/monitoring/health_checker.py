@@ -19,7 +19,8 @@ class HealthChecker:
         self.error_count = 0
         self.last_prediction_time = None
     
-    def check_health(self, model=None, model_source=None, model_version=None) -> Dict:
+    def check_health(self, model=None, model_source=None, model_version=None,
+                     feature_columns=None) -> Dict:
         """
         Comprehensive health check
 
@@ -27,6 +28,7 @@ class HealthChecker:
             model: The currently served model (or None).
             model_source: Where the model came from — "mlflow" or "local".
             model_version: The active registry model version, if any.
+            feature_columns: The feature columns the served model expects.
 
         Returns:
             Health status dictionary
@@ -41,11 +43,7 @@ class HealthChecker:
         # Model check
         if model is not None:
             try:
-                # Quick prediction test
-                import numpy as np
-                n_features = int(getattr(model, "n_features_in_", 10))
-                test_input = np.zeros((1, n_features))  # Dummy input matching model expectation
-                _ = model.predict(test_input)
+                _ = self._probe_model(model, feature_columns)
                 health['checks']['model'] = {'status': 'ok', 'loaded': True}
             
             except Exception as e:
@@ -94,6 +92,30 @@ class HealthChecker:
         }
         
         return health
+
+    @staticmethod
+    def _probe_model(model, feature_columns=None):
+        """Run a dummy prediction against the model's real feature contract.
+
+        The probe width comes from the *served feature list*, not a hardcoded
+        guess: a native ``XGBRegressor`` and an ``mlflow.pyfunc`` wrapper both
+        accept a DataFrame with those columns, whereas a ``pyfunc`` wrapper has
+        no ``n_features_in_`` and would fail a fixed-width numpy probe (R13).
+        """
+        import numpy as np
+        import pandas as pd
+
+        if feature_columns:
+            probe = pd.DataFrame([{column: 0.0 for column in feature_columns}])
+            return model.predict(probe)
+
+        n_features = getattr(model, "n_features_in_", None)
+        if n_features is None:
+            raise ValueError(
+                "Cannot probe model: no feature_columns supplied and the model "
+                "exposes no n_features_in_."
+            )
+        return model.predict(np.zeros((1, int(n_features))))
     
     def check_readiness(self, model=None) -> Dict:
         """

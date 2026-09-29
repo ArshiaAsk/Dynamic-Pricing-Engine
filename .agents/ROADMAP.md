@@ -191,10 +191,15 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R13 — Health check validates the actually-served model type
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `src/monitoring/health_checker.py:36-51`, `src/api/router.py:111-120`
+- **Status:** done
+- **Files touched:** `src/monitoring/health_checker.py:36-51`, `src/api/router.py:111-120`, `tests/test_health_model_type.py` (new)
 - **Acceptance criteria:** With a native `XGBRegressor` **and** with an `mlflow.pyfunc`-wrapped model, `GET /v1/health` returns 200 and `checks.model.status == "ok"`. No hardcoded `10`-column fallback (`getattr(model, "n_features_in_", 10)`) remains.
 - **Depends on:** R3
+- **Evidence (2026-09-29, committed `models/demand_model.pkl` + `models/features.json`):**
+  - **Fix:** the probe now derives its width from the *served feature list* (`health_checker.py::_probe_model`, passed `engine.feature_columns` by `router.py:114-119`) and predicts on a zero-row `DataFrame` of those columns — accepted by both a native `XGBRegressor` and a `pyfunc` wrapper. The hardcoded fallback is gone: `grep` for `getattr(model, "n_features_in_", 10)` / `n_features_in_", 10` → **no matches**.
+  - **Pre-fix failure (CONVENTIONS rule 18), reproduced:** with the old probe, a pyfunc model (no `n_features_in_`) → `{'status': 'error', 'loaded': True, 'error': 'Feature shape mismatch, expected: 31, got 10'}` and overall `degraded` (→ HTTP 503). New probe on the same model → `{'status': 'ok', 'loaded': True}` / `healthy`.
+  - **Tests:** `pytest tests/test_health_model_type.py -v` → **3 passed** — `test_health_ok_with_native_xgboost` (HTTP 200, `status == "ok"`), `test_health_ok_with_pyfunc_model` (asserts the wrapper has no `n_features_in_`, then HTTP 200, `status == "ok"`, `source == "mlflow"`), `test_no_hardcoded_feature_width_fallback`. The pyfunc case builds the wrapper with `mlflow.xgboost.save_model` + `mlflow.pyfunc.load_model` (no registry needed) and `pytest.importorskip("mlflow")`s.
+  - **Suite:** `pytest tests/` → **45 passed, 2 skipped**, 0 collection errors. R4 and R5 tests re-run together with R13: `pytest tests/test_serving_features.py tests/test_optimizer_real.py tests/test_mlflow_registry.py tests/test_health_model_type.py -q` → **24 passed, 2 skipped**.
 
 ### R14 — Convert smoke tests into a collectable pytest module
 - **Priority:** P1

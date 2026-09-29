@@ -115,6 +115,7 @@ def health_check():
         model=engine.model,
         model_source=engine.model_source,
         model_version=engine.model_version,
+        feature_columns=engine.feature_columns,
     )
     
     # Return 503 if unhealthy
