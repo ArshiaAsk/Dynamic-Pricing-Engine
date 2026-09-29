@@ -66,10 +66,16 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R2 — Fix grid search to build the complete 31-column feature frame
 - **Priority:** P0
-- **Status:** todo
-- **Files touched:** `src/pricing/optimizer.py`
+- **Status:** done
+- **Files touched:** `src/pricing/optimizer.py`, `src/pricing/engine.py` (the engine alias was required by the API criterion below)
 - **Acceptance criteria:** `PriceOptimizer(model, feats).optimize(base, 70, 110, 50)` returns a dict without raising, with `70 <= optimal_price <= 110` and `expected_revenue >= 0.99 * (max revenue over a >= 901-point grid on the same bounds, computed **at test time with the same model and bounds** — no hardcoded reference)`. `POST /v1/optimize-price` with `optimization_method="grid_search"` (canonical; `"grid"` is an accepted alias, per DECISIONS D2) returns HTTP 200 (not 500). The 9-column `KeyError` from STATE.md §5.1 no longer occurs.
 - **Depends on:** none
+- **Evidence (2026-09-29, commit `ffc55fe`, committed `models/demand_model.pkl`; reference grid computed at test time per CONVENTIONS rule 34):**
+  - **Before (reproduced):** `PriceOptimizer(model, feats).optimize(base, 70, 110, 50)` → `KeyError: "['price_advantage', 'log_price', 'log_comp_price', 'price_advantage_sin', 'price_change_1d', 'price_change_7d', 'roll_mean_price_7', 'roll_mean_price_14', 'roll_mean_price_28'] not in index"` (the exact STATE.md §5.1 symptom).
+  - **After (direct):** `optimize(base, 70, 110, 50)` → `optimal_price=77.3469`, `expected_demand=76.9183`, `expected_revenue=5949.394`; test-time 901-point reference max revenue `5948.347`; ratio `1.00018 >= 0.99` ✓; `70 <= 77.3469 <= 110` ✓; no exception. The `_build_features` mirror selects all 31 `models/features.json` columns.
+  - **After (API):** `python -m src.api.server` (port 8137) → `GET /v1/health` → **HTTP 200**; `POST /v1/optimize-price` `optimization_method="grid_search"` → **HTTP 200**, body `optimal_price=77.3469, expected_revenue=5949.394, optimization_method="grid_search"`; `"grid"` → **HTTP 200** as well. Previously both the grid path (KeyError) and `grid_search` (ValueError → 500) failed.
+  - Existing suite unaffected: `pytest tests/ -q` → **21 passed**.
+  - **Caveat (outside the stated criterion, recorded honestly):** at the caller-chosen `steps=50` the fixed-width grid can undershoot on wide bounds — observed ratios vs the test-time 901-point reference: `(70,110)` 1.00018, `(30,80)` 0.98977, `(30,120)` 0.97145. This is inherent to a fixed 50-point grid on a piecewise-constant revenue curve with a narrow peak, not the feature-frame bug R2 fixes. R2's criterion is `(70,110)` and it passes; a dense grid + refinement (as in R1) or a higher default resolution would close the gap and is left to a later item (relevant once R6 makes `grid_search` the only served method).
 
 ### R3 — Make `mlflow` import lazy/optional so serving and tests start without it
 - **Priority:** P0
@@ -330,4 +336,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-29, against commit 0ba7d5a (R1, R3 done; see `.agents/STATE.md`).
+Last updated: 2026-09-29, against commit ffc55fe (R1, R2, R3 done; see `.agents/STATE.md`).

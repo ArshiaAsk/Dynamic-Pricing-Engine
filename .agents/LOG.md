@@ -17,6 +17,29 @@ Next session should start with:
 
 ---
 
+## 2026-09-29 — R2 done: grid search builds the complete 31-column feature frame; API `grid_search` returns 200
+
+Done:
+- **R2 implemented and verified. Code commit `ffc55fe`** ("fix(pricing): build complete 31-column feature frame in grid search (R2)"), touching `src/pricing/optimizer.py` and `src/pricing/engine.py`.
+  - `optimizer.py`: added `_build_features(base_features, price)` mirroring R1's `BayesianPriceOptimizer._build_features`, and replaced the inline 5-column construction with it, so all 31 `models/features.json` columns are present. Reused R1's feature logic but did **not** merge the optimizers (that is R4).
+  - `engine.py`: `elif method == "grid"` → `elif method in ("grid", "grid_search")`, so the canonical `grid_search` name (DECISIONS D2) returns 200. The `"bayesian"` branch is untouched — its 422 rejection and the schema enum are R6.
+- **Before (reproduced against the committed model):** `PriceOptimizer(model, feats).optimize(base, 70, 110, 50)` → `KeyError: "['price_advantage', 'log_price', 'log_comp_price', 'price_advantage_sin', 'price_change_1d', 'price_change_7d', 'roll_mean_price_7', 'roll_mean_price_14', 'roll_mean_price_28'] not in index"` — the exact STATE.md §5.1 symptom.
+- **After (observed evidence):**
+  - Direct: `optimize(base, 70, 110, 50)` → `optimal_price=77.3469`, `expected_demand=76.9183`, `expected_revenue=5949.394`; test-time 901-point reference max revenue `5948.347`; ratio `1.00018 ≥ 0.99`; price within `[70,110]`; no exception.
+  - API: `python -m src.api.server` (port 8137) → `GET /v1/health` **200**; `POST /v1/optimize-price` `optimization_method="grid_search"` → **HTTP 200** (`optimal_price=77.3469, expected_revenue=5949.394, optimization_method="grid_search"`); `"grid"` → **HTTP 200** too. The 9-column KeyError no longer occurs (was HTTP 500).
+  - `pytest tests/ -q` → **21 passed**.
+- Docs updated in the same session: ROADMAP **R2 → done** with the evidence above; STATE.md §1 grid row → CONFIRMED, §2 serving-path dispatch, §5.1 marked fixed, `Last verified` → `ffc55fe`.
+
+Left open / blocked:
+- **Caveat (outside R2's stated criterion, recorded honestly):** at the caller-chosen `steps=50` the fixed-width grid can undershoot on wide bounds — observed ratios vs the test-time 901-point reference: `(70,110)` 1.00018 ✓, `(30,80)` 0.98977, `(30,120)` 0.97145. This is inherent to a 50-point grid on a piecewise-constant revenue curve with a narrow peak, not the feature-frame bug R2 fixes. R2's criterion is `(70,110)` and it passes. A dense grid + refinement (as in R1) or a higher default resolution would close the gap; not in R2's scope.
+- R6 (canonical `grid_search`, reject `"bayesian"` with 422), R7 (real-model regression test), R4 (shared feature builder), R8/R9/R10 remain `todo`.
+- **Note for R6/R7:** after R6, `grid_search` becomes the only served optimizer, so the coarse-grid caveat above becomes user-facing — worth considering a resolution bump there or in a follow-up.
+
+Next session should start with:
+- R7 (real-model regression test locking in R1 + R2), then R6, then R8/R9/R10. Workflow: branch from current `main`, prefer merge over amend once a branch exists (see the R1 branch-divergence incident).
+
+---
+
 ## 2026-09-29 — R3 done: lazy/optional `mlflow` import; API and `pytest tests/` start without it
 
 Done:
