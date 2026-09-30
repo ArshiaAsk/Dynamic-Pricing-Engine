@@ -17,6 +17,26 @@ Next session should start with:
 
 ---
 
+## 2026-09-30 — Docs-only: correct "committed model" phrasing; add R34 for the unused `product_id` field (1 docs commit)
+
+Done:
+- **Corrected the "committed `models/demand_model.pkl`" phrasing** in the living docs to match reality: the pickle (and `reports/*`, `data/features/*.parquet`) are **gitignored** (`.gitignore:45,51,60-61`) and regenerated in the working tree — only `models/features.json` is tracked.
+  - `.agents/STATE.md`: fixed the "How this was produced" line and the R7 row; added an explicit **Artifact tracking** paragraph so any remaining loose "committed" wording is unambiguous.
+  - `.agents/ROADMAP.md`: every occurrence in R1/R2/R4/R5/R6/R7/R9/R13/R12 evidence + the sequencing note now reads "working-tree (gitignored) `models/demand_model.pkl`" (or "working-tree artifact/model"); the historical evidence numbers and commit hashes were left unchanged.
+  - `.agents/CONVENTIONS.md`: rule 14 now says "working-tree `models/demand_model.pkl` (gitignored, regenerated) + the tracked `models/features.json`".
+- **Added ROADMAP R34** (P1, `todo`): "`PricingRequest.product_id` is accepted but unused (latent contract mismatch)". R12/D5 removed `product_id` from the model features, but `src/api/schemas.py:9` still declares it required and the serving path silently drops it — harmless today, but a client sending it would reasonably expect it to affect the price. R34 requires either removing the field (updating UI/tests/README in the same PR) or documenting it as non-model and asserting it is absent from the served feature columns. Updated the ROADMAP priority counts (P1 → 19 items, total → 34), the suggested execution order, and the `Last updated` line.
+- **Deliberately left untouched** (per the no-edit rules): past `.agents/LOG.md` entries (LOG header: "Do not edit past entries"), the owner-supplied `.agents/archive/audit_Dynamic-Pricing-Engine.md` (CONVENTIONS rule 33), and the historical task file `.agents/tasks/R1-real-optimizer.md` — their "committed model" wording is a record of what was written at the time; the correction is carried by this entry and the living docs above.
+- **No code changed.** Docs-only commit on `main`.
+
+Left open / blocked:
+- R34 is new and `todo`; it depends on R12 (done).
+- The stale "31 committed columns" number in R4's evidence block (ROADMAP) is left as-is — it is a historical record of R4 (features.json is now 30 columns after R12).
+
+Next session should start with:
+- The next P1 item (e.g. R14 smoke tests, R15 drift, R16 error leakage, R34 `product_id`). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-09-30 — D5/D6 accepted; R12 done: chronological split + `product_id` dropped + retrain; R7 re-verified (2 commits)
 
 Done:

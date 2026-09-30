@@ -9,9 +9,9 @@ production demo." It is derived from `.agents/STATE.md` (verified ground truth).
 **Guiding rule:** the headline capability must become true before anything is advertised.
 Do not present a claim as working until an item below that makes it true is `done`.
 
-**Priorities (re-set 2026-09-28):** P0 = R1, R2, R3, R6, R7, R8, R9, R10 (8 items — the
-core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2 = R27–R33
-(7 items). Total: 33 items.
+**Priorities (re-set 2026-09-28; R34 added 2026-09-30):** P0 = R1, R2, R3, R6, R7, R8, R9, R10
+(8 items — the core must be true and the suite must run). P1 = R4, R5, R11–R26, R34 (19 items).
+P2 = R27–R33 (7 items). Total: 34 items.
 
 ---
 
@@ -45,9 +45,9 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Priority:** P0
 - **Status:** done
 - **Files touched:** `src/pricing/bayesian_optimizer.py` (the optional `src/pricing/search.py` was not needed)
-- **Acceptance criteria:** Against the committed `models/demand_model.pkl` + `models/features.json`, using the standard `base_features` from STATE.md §2, for bounds `(30,80)`, `(70,110)`, `(10,200)`, `(100,120)`, and `(30,120)`: the returned `expected_revenue` is **>= 0.99 ×** the maximum revenue over a fine grid of **>= 901 points** on the same bounds, where the reference grid is computed **at test time with the same model and the same bounds** (no hardcoded numbers); `optimization_success` is `True`; and the returned price lies within the bounds. Additionally, for any range where the reference grid's argmax is strictly interior, the returned price must not sit on a bound. (Comparing **revenue** rather than price is required because a tree model's revenue curve is piecewise and has plateaus — distinct prices can tie at the same revenue, so a price-equality test would be both fragile and wrong.) No `scipy.optimize.minimize(method='L-BFGS-B')` (or any gradient method) remains on the tree objective.
+- **Acceptance criteria:** Against the working-tree (gitignored) `models/demand_model.pkl` + `models/features.json`, using the standard `base_features` from STATE.md §2, for bounds `(30,80)`, `(70,110)`, `(10,200)`, `(100,120)`, and `(30,120)`: the returned `expected_revenue` is **>= 0.99 ×** the maximum revenue over a fine grid of **>= 901 points** on the same bounds, where the reference grid is computed **at test time with the same model and the same bounds** (no hardcoded numbers); `optimization_success` is `True`; and the returned price lies within the bounds. Additionally, for any range where the reference grid's argmax is strictly interior, the returned price must not sit on a bound. (Comparing **revenue** rather than price is required because a tree model's revenue curve is piecewise and has plateaus — distinct prices can tie at the same revenue, so a price-equality test would be both fragile and wrong.) No `scipy.optimize.minimize(method='L-BFGS-B')` (or any gradient method) remains on the tree objective.
 - **Depends on:** none
-- **Evidence (2026-09-29, commit `b21e45a`, committed `models/demand_model.pkl`; reference grid computed at test time per CONVENTIONS rule 34):**
+- **Evidence (2026-09-29, commit `b21e45a`, working-tree (gitignored) `models/demand_model.pkl`; reference grid computed at test time per CONVENTIONS rule 34):**
 
   | bounds | optimal_price | expected_revenue | 901-pt ref max | revenue ratio | ref argmax interior? | bound-aware rule |
   |---|---|---|---|---|---|---|
@@ -70,7 +70,7 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Files touched:** `src/pricing/optimizer.py`, `src/pricing/engine.py` (the engine alias was required by the API criterion below)
 - **Acceptance criteria:** `PriceOptimizer(model, feats).optimize(base, 70, 110, 50)` returns a dict without raising, with `70 <= optimal_price <= 110` and `expected_revenue >= 0.99 * (max revenue over a >= 901-point grid on the same bounds, computed **at test time with the same model and bounds** — no hardcoded reference)`. `POST /v1/optimize-price` with `optimization_method="grid_search"` (canonical; `"grid"` is an accepted alias, per DECISIONS D2) returns HTTP 200 (not 500). The 9-column `KeyError` from STATE.md §5.1 no longer occurs.
 - **Depends on:** none
-- **Evidence (2026-09-29, commit `ffc55fe`, committed `models/demand_model.pkl`; reference grid computed at test time per CONVENTIONS rule 34):**
+- **Evidence (2026-09-29, commit `ffc55fe`, working-tree (gitignored) `models/demand_model.pkl`; reference grid computed at test time per CONVENTIONS rule 34):**
   - **Before (reproduced):** `PriceOptimizer(model, feats).optimize(base, 70, 110, 50)` → `KeyError: "['price_advantage', 'log_price', 'log_comp_price', 'price_advantage_sin', 'price_change_1d', 'price_change_7d', 'roll_mean_price_7', 'roll_mean_price_14', 'roll_mean_price_28'] not in index"` (the exact STATE.md §5.1 symptom).
   - **After (direct):** `optimize(base, 70, 110, 50)` → `optimal_price=77.3469`, `expected_demand=76.9183`, `expected_revenue=5949.394`; test-time 901-point reference max revenue `5948.347`; ratio `1.00018 >= 0.99` ✓; `70 <= 77.3469 <= 110` ✓; no exception. The `_build_features` mirror selects all 31 `models/features.json` columns.
   - **After (API):** `python -m src.api.server` (port 8137) → `GET /v1/health` → **HTTP 200**; `POST /v1/optimize-price` `optimization_method="grid_search"` → **HTTP 200**, body `optimal_price=77.3469, expected_revenue=5949.394, optimization_method="grid_search"`; `"grid"` → **HTTP 200** as well. Previously both the grid path (KeyError) and `grid_search` (ValueError → 500) failed.
@@ -97,7 +97,7 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Files touched:** `src/api/schemas.py`, `src/pricing/engine.py`, `src/pricing/optimizer.py`, `configs/config{,.dev,.prod}.yaml` (default-method honesty), `tests/test_api.py`, `tests/test_optimizer_real.py`
 - **Acceptance criteria:** There is exactly one canonical search method, honestly named `grid_search`, with `grid` accepted as an alias (DECISIONS D2). `POST /v1/optimize-price` with each of `"grid_search"` and `"grid"` returns HTTP 200 and a price within the requested bounds. The legacy `"bayesian"` method is **rejected**: `"bayesian"` → HTTP 422 validation error, not 500 and not a deprecation-warning alias. Any other unknown method also returns HTTP 422, not 500. **Because R6 makes `grid_search` the only served optimizer, its correctness — not just its status code — must be verified:** for each bound pair in `(30,80)`, `(70,110)`, `(10,200)`, `(100,120)`, `(30,120)`, the served result's `expected_revenue` must be **≥ 0.99 ×** the maximum revenue over a **≥ 901-point** grid computed **at test time with the same model and the same bounds** (CONVENTIONS rule 34; no hardcoded reference). This requires raising `steps` / making it adaptive to the bound width, or reusing R1's dense-grid + local-refinement approach, so the default 50-point grid no longer undershoots wide ranges.
 - **Depends on:** R2
-- **Evidence (2026-09-29, code commit `b48d18a`, committed `models/demand_model.pkl`; references computed at test time per CONVENTIONS rule 34):**
+- **Evidence (2026-09-29, code commit `b48d18a`, working-tree (gitignored) `models/demand_model.pkl`; references computed at test time per CONVENTIONS rule 34):**
   - **Implementation:** `src/api/schemas.py` now types `optimization_method` as `Literal["grid_search", "grid"]` with default `"grid_search"`, so `"bayesian"` and any unknown value fail Pydantic validation → **HTTP 422** (previously `"bayesian"` was the default and unknown values reached `engine.py`'s `ValueError` → HTTP 500). `src/pricing/engine.py` defaults to `"grid_search"`, dispatches only `grid`/`grid_search` to `PriceOptimizer`, and the `"bayesian"` branch, its now-unused `BayesianPriceOptimizer` import, and the dead `compare_methods()` were removed. `configs/*.yaml`'s unread `default_method` was corrected from `bayesian` to `grid_search` (naming honesty, rule 24).
   - **Steps-adaptation fix (the R2 caveat):** `PriceOptimizer` no longer takes a fixed 50-point grid. `_grid_points()` scales the candidate count with the bound width (target spacing `0.02`, floor `901` points, cap `20001`) and `optimize` now vectorizes `model.predict` over the whole grid in one call. `optimize_with_constraints` (margin floor + inventory cap) was added so the served method keeps the business-constraint contract that the retired `"bayesian"` path used to provide.
   - **R6 status codes** (`POST /v1/optimize-price`, `price_min=70, price_max=110`, via `TestClient`):
@@ -129,11 +129,11 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Priority:** P0
 - **Status:** done
 - **Files touched:** `tests/test_optimizer_real.py` (new)
-- **Acceptance criteria:** The test loads the committed `models/demand_model.pkl` + `models/features.json` and asserts every condition in R1 and R2. All reference values are computed **at test time** from the loaded artifact and the given bounds — **no hardcoded numbers** — so the test is model-agnostic and remains valid after any retrain. It is demonstrated to **FAIL** against commit `c32841f` (or with R1/R2 temporarily reverted) and to **PASS** after R1/R2.
+- **Acceptance criteria:** The test loads the working-tree (gitignored) `models/demand_model.pkl` + `models/features.json` and asserts every condition in R1 and R2. All reference values are computed **at test time** from the loaded artifact and the given bounds — **no hardcoded numbers** — so the test is model-agnostic and remains valid after any retrain. It is demonstrated to **FAIL** against commit `c32841f` (or with R1/R2 temporarily reverted) and to **PASS** after R1/R2.
 - **Note:** R7 must be **re-run after R12** (R12 retrains the model and changes the artifact that R7's reference is derived from).
 - **Depends on:** R1, R2
-- **Evidence (2026-09-29, committed `models/demand_model.pkl`; references computed at test time per CONVENTIONS rule 34):**
-  - **New file:** `tests/test_optimizer_real.py` (15 tests). Loads the committed artifact via fixtures; the R1/R2 reference optimum is computed from the model on a 901-point grid built by a test-local *oracle* feature builder (`_serving_features`), deliberately independent of the optimizers' own `_build_features` so the reference cannot be circular. The only constants are request inputs (the standard `base_features`), the bound pairs, `REFERENCE_POINTS = 901`, `REVENUE_RATIO = 0.99`, `cost=60`, `min_margin_pct=0.15` — no model-derived numbers.
+- **Evidence (2026-09-29, working-tree (gitignored) `models/demand_model.pkl`; references computed at test time per CONVENTIONS rule 34):**
+  - **New file:** `tests/test_optimizer_real.py` (15 tests). Loads the working-tree artifact via fixtures; the R1/R2 reference optimum is computed from the model on a 901-point grid built by a test-local *oracle* feature builder (`_serving_features`), deliberately independent of the optimizers' own `_build_features` so the reference cannot be circular. The only constants are request inputs (the standard `base_features`), the bound pairs, `REFERENCE_POINTS = 901`, `REVENUE_RATIO = 0.99`, `cost=60`, `min_margin_pct=0.15` — no model-derived numbers.
   - **PASS on current code:** `/home/arshiaask/projects/venv/bin/python -m pytest tests/test_optimizer_real.py -q` → **13 passed, 2 skipped** (the 2 skips are `(10,200)`/`(100,120)`, where the reference argmax genuinely lies on a bound, so the R1 bound-hugging rule does not apply). Covers R1 criteria 1–7 (revenue ratio, `optimization_success`, in-bounds, interiority, no `L-BFGS-B`/`minimize(`, result contract + `PricingResponse`, margin constraint) and R2 (complete 31-column frame + grid revenue ratio at `(70,110)`, `steps=50`).
   - **FAIL against the pre-fix code (demonstrated):** `git checkout c32841f -- src/pricing/bayesian_optimizer.py src/pricing/optimizer.py` then re-run → **7 failed, 6 passed, 2 skipped, exit code 1**, then restored to HEAD. Failures are exactly the R1/R2 bugs: `test_bayesian_reaches_reference_optimum[30.0-80.0|70.0-110.0|30.0-120.0]` (L-BFGS-B returns a bound/midpoint, revenue below the 0.99x reference), `test_bayesian_not_on_bound_when_reference_optimum_is_interior[30.0-80.0]`, `test_no_gradient_method_remains_on_tree_objective` (`L-BFGS-B` present), `test_grid_optimizer_builds_complete_feature_frame` (`AttributeError: 'PriceOptimizer' object has no attribute '_build_features'`), and `test_grid_optimizer_reaches_reference_optimum` (`KeyError: "['price_advantage', 'log_price', 'log_comp_price', 'price_advantage_sin', 'price_change_1d', 'price_change_7d', 'roll_mean_price_7', 'roll_mean_price_14', 'roll_mean_price_28'] not in index"` — the exact STATE.md §5.1 symptom). The `(10,200)`/`(100,120)` Bayesian cases correctly still pass pre-fix because their true optimum is on the bound.
   - Existing suite unaffected: `pytest tests/ -q` → **34 passed, 2 skipped**.
@@ -156,7 +156,7 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Files touched:** `tests/test_api.py`
 - **Acceptance criteria:** Test asserts HTTP 200 for both `grid_search` and `grid`, and HTTP 422 for the legacy `"bayesian"` method; the response contains `optimal_price`, `expected_demand`, `expected_revenue`, `optimization_method`; the price is within the requested `[price_min, price_max]`; `grid_search` revenue ≥ 0.99 × the vectorized optimum computed **at test time with the same model and bounds** (no hardcoded reference).
 - **Depends on:** R6, R8
-- **Evidence (2026-09-29, commit `bc2f674`, committed `models/demand_model.pkl`; reference computed at test time per CONVENTIONS rule 34):**
+- **Evidence (2026-09-29, commit `bc2f674`, working-tree (gitignored) `models/demand_model.pkl`; reference computed at test time per CONVENTIONS rule 34):**
   - **`tests/test_api.py::test_grid_path_response_contract`** — `grid_search` and `grid` → **HTTP 200**; the body contains `optimal_price`, `expected_demand`, `expected_revenue`, `optimization_method`; the method is echoed; `70 ≤ optimal_price ≤ 110`; the body validates against `PricingResponse`. Legacy `"bayesian"` → **HTTP 422**.
   - **`tests/test_api.py::test_grid_path_reaches_reference_optimum`** — served `grid_search` `expected_revenue` **5950.3983** vs a test-time 901-point reference max **5948.3471** (ratio **1.00034 ≥ 0.99**). The reference is built from the *served* model (`engine.model`) and the requested bounds through an independent oracle feature builder (`_oracle_serving_features`, deliberately not the shared `build_serving_features`), so it is not circular and contains no hardcoded model-derived number.
   - **Observed (TestClient):** `grid_search` → 200 `optimal_price=77.3600, expected_demand=76.9183, expected_revenue=5950.3983`; `grid` → 200 same; `bayesian` → 422.
@@ -186,13 +186,13 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Files touched:** `src/pricing/features.py` (new), `src/pricing/bayesian_optimizer.py`, `src/pricing/optimizer.py`, `tests/test_serving_features.py` (new), `tests/test_optimizer_real.py` (R2 test retargeted to the shared builder)
 - **Acceptance criteria:** A unit test passes the same `(base_features, price)` to both optimizers and asserts (a) identical ordered feature vectors (same 31 columns, same values) and (b) identical `model.predict` output. Exactly one function computes price-dependent serving features; neither optimizer builds its own ad-hoc dict.
 - **Depends on:** R1, R2
-- **Evidence (2026-09-29, committed `models/demand_model.pkl` + `models/features.json`):**
+- **Evidence (2026-09-29, working-tree (gitignored) `models/demand_model.pkl` + `models/features.json`):**
   - **New module** `src/pricing/features.py::build_serving_features(base_features, price, feature_columns=None)` is the only function that computes price-dependent serving features; when `feature_columns` is given it returns exactly the committed `models/features.json` columns in order.
   - **Both optimizers consume it:** `src/pricing/optimizer.py:4,21` and `src/pricing/bayesian_optimizer.py:14,137,147` import and call `build_serving_features`; the per-optimizer `_build_features` methods (the R2 interim duplication) are deleted. `grep -n "price_advantage_sin\|log_comp_price" src/pricing/optimizer.py src/pricing/bayesian_optimizer.py` → **no matches** (no ad-hoc dict remains).
   - **R4(a) identical ordered feature vectors:** `tests/test_serving_features.py::test_both_optimizers_feed_identical_ordered_feature_vectors` drives both optimizers over a degenerate `[77.0, 77.0]` range with a recording model and asserts the exact frames fed to `predict` have the same index (`list(...) == list(real_feature_columns)`, 31 columns) and identical values. **PASSED.**
   - **R4(b) identical predictions:** `test_both_optimizers_produce_identical_model_predictions` asserts `real_model.predict(grid_frame)[0] == real_model.predict(bayesian_frame)[0]` and that `expected_demand`/`expected_revenue` are equal. **PASSED.**
   - `test_exactly_one_function_computes_price_dependent_features` asserts neither optimizer source assigns the ad-hoc keys and both reference the shared builder. `test_serving_builder_covers_committed_columns_in_order` asserts the builder returns the 31 committed columns in order. **PASSED.**
-  - **No behavioral drift:** direct re-run against the committed model — `BayesianPriceOptimizer.optimize(base,70,110)` → `77.372484` / revenue `5951.359`; `PriceOptimizer.optimize(base,70,110,50)` → `77.346939` / `5949.394` — identical to the R1/R2 STATE.md values.
+  - **No behavioral drift:** direct re-run against the working-tree model — `BayesianPriceOptimizer.optimize(base,70,110)` → `77.372484` / revenue `5951.359`; `PriceOptimizer.optimize(base,70,110,50)` → `77.346939` / `5949.394` — identical to the R1/R2 STATE.md values.
   - **Suite:** `pytest tests/test_serving_features.py -v` → **4 passed**; `pytest tests/` → **38 passed, 2 skipped** (was 34+2; +4 R4 tests), 0 collection errors. R2's `test_grid_optimizer_builds_complete_feature_frame` was retargeted to the shared builder (R2's criterion — the complete 31-column frame — is unchanged and still asserted).
 
 ### R5 — Correct and loud MLflow registry resolution (and fix `promote_model.py`)
@@ -201,7 +201,7 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Files touched:** `src/pricing/engine.py`, `scripts/promote_model.py`, `src/monitoring/health_checker.py`, `src/api/router.py:111-120`, `tests/test_mlflow_registry.py` (new). Environment: `protobuf==4.25.9` + `setuptools<81` installed into the venv so `mlflow` 2.12.1 imports (see STATE.md).
 - **Acceptance criteria:** (a) When no Production stage/alias exists, the engine logs at **ERROR** (not WARNING) and exposes the active model source (e.g. `/v1/health` reports `checks.model.source == "local"`). (b) `scripts/promote_model.py` uses alias-based APIs (`set_registered_model_alias` / `set_model_version_tag`) with zero deprecated calls (`get_latest_versions`, `transition_model_version_stage`). (c) After running `promote_model.py`, the engine loads the registry model (non-null `model_version`) — verified by a test.
 - **Depends on:** R3
-- **Evidence (2026-09-29, isolated temp file-store registry; committed `models/demand_model.pkl`):**
+- **Evidence (2026-09-29, isolated temp file-store registry; working-tree (gitignored) `models/demand_model.pkl`):**
   - **Environment unblock (root-cause, not a workaround — CONVENTIONS rule 19):** `mlflow` 2.12.1 was unimportable (protobuf 7.35.1 removed `google.protobuf.service`; setuptools 82 removed `pkg_resources`). Installed `protobuf==4.25.9` + `setuptools<81` into the venv; `import mlflow` now succeeds. The engine bounds registry calls (`MLFLOW_HTTP_REQUEST_TIMEOUT=5`, `MLFLOW_HTTP_REQUEST_MAX_RETRIES=1` via `os.environ.setdefault`) so a dead tracking server fails fast instead of hanging the 30s request timeout (the pre-hardening behaviour was a 504 after ~194s — reproduced under a shim).
   - **R5(a):** direct run against a registry with a registered version but **no** production alias →
     `ERROR src.pricing.engine: No Production version or 'production' alias found in the MLflow registry for 'demand_forecasting_model'. Falling back to the local artifact models/demand_model.pkl.` → `source=local, version=None`. `GET /v1/health` → **HTTP 200**, `checks.model = {'status': 'ok', 'loaded': True, 'source': 'local'}`.
@@ -227,7 +227,7 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Status:** done
 - **Files touched:** `src/training/dataset.py:34-44`, `src/features/feature_builder.py:109-126`, `src/training/pipeline.py`, `scripts/train_with_tuning.py`, `configs/config.yaml:31-32` (+ `configs/config.{dev,prod}.yaml`), `tests/test_training_data.py` (new), `models/features.json` (regenerated)
 - **Acceptance criteria:** The split is chronological — a test asserts `max(train.date) < min(val.date)` (no `shuffle=True`). `product_id` is removed from the model feature list (or replaced by an out-of-fold target encoding with no leakage; assert no target leakage). `reports/training_metrics.json` is regenerated and contains both `R2` and `MAPE`.
-- **Note:** This item retrains the model, changing the committed artifact. **Re-run R7 after R12** — R7's references are recomputed at test time, so it must be re-run rather than left as a stale pass.
+- **Note:** This item retrains the model, changing the working-tree (gitignored) artifact. **Re-run R7 after R12** — R7's references are recomputed at test time, so it must be re-run rather than left as a stale pass.
 - **Depends on:** D5, D6 (both `accepted` 2026-09-30, commit `b3ecf90`)
 - **Evidence (2026-09-30, code commit `47162d3`; retrained on the same raw CSV, features rebuilt from it):**
   - **Chronological split (D6).** `DatasetBuilder.split(X, y, dates)` sorts by `date` (stable) and holds out the most recent `test_size` fraction; whole calendar days are kept together so no date appears in both sets. Observed on the regenerated parquet: **train 13,200 rows 2023-02-05 … 2023-10-26**, **validation 3,300 rows 2023-10-27 … 2023-12-31**; `max(train.date) < min(val.date)` → **True**; overlap dates → `[]`. `grep -n "shuffle=True\|train_test_split" src/training/dataset.py` → **no matches**. `test_size` is read from `configs/config.yaml`; the obsolete `training.random_state` key was removed from `config.yaml`/`config.dev.yaml`/`config.prod.yaml`.
@@ -244,7 +244,7 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Files touched:** `src/monitoring/health_checker.py:36-51`, `src/api/router.py:111-120`, `tests/test_health_model_type.py` (new)
 - **Acceptance criteria:** With a native `XGBRegressor` **and** with an `mlflow.pyfunc`-wrapped model, `GET /v1/health` returns 200 and `checks.model.status == "ok"`. No hardcoded `10`-column fallback (`getattr(model, "n_features_in_", 10)`) remains.
 - **Depends on:** R3
-- **Evidence (2026-09-29, committed `models/demand_model.pkl` + `models/features.json`):**
+- **Evidence (2026-09-29, working-tree (gitignored) `models/demand_model.pkl` + `models/features.json`):**
   - **Fix:** the probe now derives its width from the *served feature list* (`health_checker.py::_probe_model`, passed `engine.feature_columns` by `router.py:114-119`) and predicts on a zero-row `DataFrame` of those columns — accepted by both a native `XGBRegressor` and a `pyfunc` wrapper. The hardcoded fallback is gone: `grep` for `getattr(model, "n_features_in_", 10)` / `n_features_in_", 10` → **no matches**.
   - **Pre-fix failure (CONVENTIONS rule 18), reproduced:** with the old probe, a pyfunc model (no `n_features_in_`) → `{'status': 'error', 'loaded': True, 'error': 'Feature shape mismatch, expected: 31, got 10'}` and overall `degraded` (→ HTTP 503). New probe on the same model → `{'status': 'ok', 'loaded': True}` / `healthy`.
   - **Tests:** `pytest tests/test_health_model_type.py -v` → **3 passed** — `test_health_ok_with_native_xgboost` (HTTP 200, `status == "ok"`), `test_health_ok_with_pyfunc_model` (asserts the wrapper has no `n_features_in_`, then HTTP 200, `status == "ok"`, `source == "mlflow"`), `test_no_hardcoded_feature_width_fallback`. The pyfunc case builds the wrapper with `mlflow.xgboost.save_model` + `mlflow.pyfunc.load_model` (no registry needed) and `pytest.importorskip("mlflow")`s.
@@ -341,6 +341,14 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 - **Acceptance criteria:** Both wait loops have a maximum attempt count/timeout and exit non-zero with a clear message when the dependency never becomes healthy. A test that points the script at a non-2xx health endpoint asserts it terminates within the timeout instead of hanging.
 - **Depends on:** none
 
+### R34 — `PricingRequest.product_id` is accepted but unused (latent contract mismatch)
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `src/api/schemas.py:9`, `app.py`, `tests/test_api.py`, `tests/smoke_tests.py`, `README.md`
+- **Acceptance criteria:** Either (a) `product_id` is removed from `PricingRequest` and every caller that sends it is updated in the same PR (UI, tests, README example), **or** (b) it is kept but its `Field` description states plainly that it is accepted for request compatibility and is **not** a model feature, with a test asserting `"product_id"` is absent from the served feature columns. Either way the request schema no longer implies `product_id` influences the predicted demand/price.
+- **Depends on:** R12
+- **Note:** R12/D5 removed `product_id` from the model feature list, but `PricingRequest` still declares it as a required field (`src/api/schemas.py:9`) and the serving path silently drops it (the feature builder restricts to the committed columns). Harmless today — the tests pass and the response is unaffected — but a latent mismatch: a client sending `product_id` would reasonably expect it to change the price. Flagged here rather than fixed inline because it touches the UI/tests/README contract, not just the schema.
+
 ---
 
 ## P2 — Polish and resume hardening
@@ -402,11 +410,11 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 1. **Unblock the core:** R1, R2, R3 (independent — can run in parallel).
 2. **Lock in the fix:** R6, R7, R8, R9, R10.
 3. **Make the demo coherent:** R4, R5, R11, R12, R13, R14.
-4. **Make it honest and operable:** R15–R26.
+4. **Make it honest and operable:** R15–R26, R34.
 5. **Polish:** R27–R33.
 
 **Sequencing note:** R12 (step 3) retrains the model. **Re-run R7 after R12** — R7 derives
-its reference from the committed artifact at test time, so its prior pass is invalidated by
+its reference from the working-tree (gitignored) artifact at test time, so its prior pass is invalidated by
 the retrain. R7 must also be re-run after any other item that rewrites
 `models/demand_model.pkl`.
 
@@ -417,4 +425,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-30, against commit 47162d3 (R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13 done; R7 re-verified after the R12 retrain; see `.agents/STATE.md`).
+Last updated: 2026-09-30, against commit 43d9a04 (R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13 done; R7 re-verified after the R12 retrain; R34 added; see `.agents/STATE.md`).
