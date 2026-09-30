@@ -224,11 +224,19 @@ core must be true and the suite must run). P1 = R4, R5, R11–R26 (18 items). P2
 
 ### R12 — Honest temporal train/validation split + `product_id` handling
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `src/training/dataset.py:34-44`, `src/features/feature_builder.py:109-126`, `src/training/pipeline.py`, `configs/config.yaml:31-32`
+- **Status:** done
+- **Files touched:** `src/training/dataset.py:34-44`, `src/features/feature_builder.py:109-126`, `src/training/pipeline.py`, `scripts/train_with_tuning.py`, `configs/config.yaml:31-32` (+ `configs/config.{dev,prod}.yaml`), `tests/test_training_data.py` (new), `models/features.json` (regenerated)
 - **Acceptance criteria:** The split is chronological — a test asserts `max(train.date) < min(val.date)` (no `shuffle=True`). `product_id` is removed from the model feature list (or replaced by an out-of-fold target encoding with no leakage; assert no target leakage). `reports/training_metrics.json` is regenerated and contains both `R2` and `MAPE`.
 - **Note:** This item retrains the model, changing the committed artifact. **Re-run R7 after R12** — R7's references are recomputed at test time, so it must be re-run rather than left as a stale pass.
-- **Depends on:** none
+- **Depends on:** D5, D6 (both `accepted` 2026-09-30, commit `b3ecf90`)
+- **Evidence (2026-09-30, code commit `47162d3`; retrained on the same raw CSV, features rebuilt from it):**
+  - **Chronological split (D6).** `DatasetBuilder.split(X, y, dates)` sorts by `date` (stable) and holds out the most recent `test_size` fraction; whole calendar days are kept together so no date appears in both sets. Observed on the regenerated parquet: **train 13,200 rows 2023-02-05 … 2023-10-26**, **validation 3,300 rows 2023-10-27 … 2023-12-31**; `max(train.date) < min(val.date)` → **True**; overlap dates → `[]`. `grep -n "shuffle=True\|train_test_split" src/training/dataset.py` → **no matches**. `test_size` is read from `configs/config.yaml`; the obsolete `training.random_state` key was removed from `config.yaml`/`config.dev.yaml`/`config.prod.yaml`.
+  - **`product_id` removed (D5).** `FeatureBuilder` still groups the lag/rolling features by `product_id` but no longer emits it; `models/features.json` is regenerated with **30 columns (was 31)**, no `product_id`; `DatasetBuilder.build` excludes it; the served model has `n_features_in_ == 30`. `test_product_id_is_not_a_model_feature` PASS. No target leakage: the feature list contains neither `y_units_sold` nor `units_sold`, and lag/rolling features are built with `.shift(1)` (no `.shift(0)`); `test_no_target_leakage` PASS.
+  - **Regenerated metrics (R2 + MAPE, no carried-over numbers).** `reports/training_metrics.json`: **R2 = 0.47498**, **MAPE = 0.34581**, MAE = 21.44, RMSE = 30.05, Directional_Accuracy = 0.7587, Train_R2 = 0.88029. (Previous artifact: R2 = 0.4682, MAPE = 0.4015.) `test_training_metrics_report_r2_and_mape` PASS.
+  - **New tests:** `tests/test_training_data.py` (5 tests) → **5 passed** (`test_split_is_chronological`, `test_split_does_not_shuffle`, `test_product_id_is_not_a_model_feature`, `test_no_target_leakage`, `test_training_metrics_report_r2_and_mape`). They skip (not error) when the gitignored parquet/report is absent.
+  - **Suite:** `pytest tests/` → **65 passed, 2 skipped**, 0 collection errors (was 60+2; +5 R12 tests). The 2 skips are R7's bound-hugging cases. Only post-summary noise is the pre-existing `PredictionLogger.__del__` shutdown `ImportError` (STATE §5.11 / R17).
+  - **R7 re-run after the retrain (see R7 note):** `pytest tests/test_optimizer_real.py -q` → **18 passed, 2 skipped** (references recomputed at test time from the new artifact). Fresh ratios vs a test-time 901-point reference: served grid `(30,80)` **1.00006**, `(70,110)` **0.99673**, `(10,200)` **1.00000**, `(100,120)` **1.00000**, `(30,120)` **1.00078** — all ≥ 0.99; Bayesian optimizer all ≥ 0.99 with `optimization_success=True`. Served API `grid_search` `(70,110)` → `optimal_price=77.06, expected_revenue=6152.54`.
+  - **Not committed (by repo convention):** `models/demand_model.pkl`, `reports/*.json|csv`, and `data/features/*.parquet` are gitignored (`.gitignore:45,51,60-61`); they are regenerated in the working tree, not tracked. The tracked model contract `models/features.json` is committed in `47162d3`.
 
 ### R13 — Health check validates the actually-served model type
 - **Priority:** P1
@@ -409,4 +417,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-29, against commit bc2f674 (R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R13 done; see `.agents/STATE.md`).
+Last updated: 2026-09-30, against commit 47162d3 (R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13 done; R7 re-verified after the R12 retrain; see `.agents/STATE.md`).

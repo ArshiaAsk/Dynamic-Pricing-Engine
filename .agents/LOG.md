@@ -17,6 +17,33 @@ Next session should start with:
 
 ---
 
+## 2026-09-30 — D5/D6 accepted; R12 done: chronological split + `product_id` dropped + retrain; R7 re-verified (2 commits)
+
+Done:
+- **D5 and D6 accepted** (`.agents/DECISIONS.md`), docs-only commit **`b3ecf90`** ("docs(agents): accept D5 (drop product_id) and D6 (chronological split)"). Both were `proposed`; the header now lists D1, D2, D5, D6, D15 as `accepted`. No code in this commit.
+- **R12 implemented and verified. Code/retrain commit `47162d3`** ("feat(training): chronological split + drop product_id model feature; retrain (R12)").
+  - **Chronological split (D6):** `src/training/dataset.py::DatasetBuilder.split(X, y, dates)` sorts rows by `date` (stable `mergesort`) and holds out the most recent `test_size` fraction; whole calendar days are kept together (if the cut lands mid-day the boundary is pushed to that day's end) so no date appears in both sets. `test_size` is read from `configs/config.yaml` (was hardcoded); the obsolete `training.random_state` key was removed from `config.yaml`/`config.dev.yaml`/`config.prod.yaml`. `src/training/pipeline.py` and `scripts/train_with_tuning.py` pass `df["date"]`; the pipeline now logs the train/validation date ranges.
+  - **`product_id` dropped (D5):** `src/features/feature_builder.py` still groups the lag/rolling features by `product_id` but no longer emits it (removed from `feature_cols`; the sort moved before column selection). `models/features.json` regenerated with **30 columns (was 31)**.
+  - **Evidence — chronological split:** train **13,200 rows 2023-02-05 … 2023-10-26**, validation **3,300 rows 2023-10-27 … 2023-12-31**; `max(train.date) < min(val.date)` → **True**; overlap dates `[]`; `grep -n "shuffle=True\|train_test_split" src/training/dataset.py` → **no matches**.
+  - **Evidence — `product_id` / leakage:** `models/features.json` contains no `product_id`; `DatasetBuilder.build` excludes it; retrained model `n_features_in_ == 30`; feature list contains neither `y_units_sold` nor `units_sold`; lag/roll features use `.shift(1)` (no `.shift(0)`).
+  - **Regenerated metrics (no carried-over numbers):** `reports/training_metrics.json` → **R2 = 0.47498, MAPE = 0.34581**, MAE = 21.44, RMSE = 30.05, Directional_Accuracy = 0.7587, Train_R2 = 0.88029. Prior artifact: R2 = 0.4682, MAPE = 0.4015, Train_R2 = 0.6332.
+  - **New tests:** `tests/test_training_data.py` (5 tests) → **5 passed**: chronological split, no shuffle, `product_id` not a feature, no target leakage, R2+MAPE present.
+  - **Retrain method:** features were rebuilt from the **existing** `data/raw/ecommerce_sales.csv` (the raw data was *not* regenerated — the synthetic generator is unseeded, so regenerating would change the dataset and confound the R12 change). Only the feature/split code changed.
+- **R7 re-run after the retrain (required by R7's note).** `pytest tests/test_optimizer_real.py -q` → **18 passed, 2 skipped** (references recomputed at test time from the new artifact, per rule 34). Fresh ratios vs a test-time 901-point reference: served grid `(30,80)` **1.00006**, `(70,110)` **0.99673**, `(10,200)` **1.00000**, `(100,120)` **1.00000**, `(30,120)` **1.00078** — all ≥ 0.99; the Bayesian optimizer is ≥ 0.99 on all five with `optimization_success=True`. Served API `grid_search` `(70,110)` → `optimal_price=77.06, expected_demand=79.841, expected_revenue=6152.544`. The 2 skips remain the `(10,200)`/`(100,120)` bound-hugging cases.
+- **Full suite:** `pytest tests/` → **65 passed, 2 skipped**, 0 collection errors (was 60+2; +5 R12 tests). Only post-summary noise is the pre-existing `PredictionLogger.__del__` shutdown `ImportError` (STATE §5.11 / R17).
+- **Docs updated after the code:** ROADMAP **R12 → done** with the evidence above and the `Last updated` line → `47162d3`; STATE.md — §1 model/`R²`/time-series-validation/grid/constraints/feature-engineering/unit-tests rows, §2 training path + verified note, §5.17 marked fixed, `Last verified` → `47162d3`; this LOG entry.
+
+Left open / blocked:
+- **Not committed (repo convention):** `models/demand_model.pkl`, `reports/*.json|csv`, and `data/features/*.parquet` are gitignored (`.gitignore:45,51,60-61`) — they are regenerated in the working tree, not tracked. Only the tracked model contract `models/features.json` (now 30 cols) is committed. This matches how R1–R11 treated the artifacts; STATE.md's phrase "committed `models/demand_model.pkl`" is loose.
+- R7 is now valid against the R12 artifact, but must be **re-run again after any later item that rewrites `models/demand_model.pkl`**.
+- R9's and R6's ratio tests are retrain-safe (references computed at test time) and passed on the new model; their recorded *numbers* in ROADMAP/STATE were updated.
+- Remaining P1 items include R14–R26 (R12 was the last of the R4/R5/R11/R12/R13 cluster).
+
+Next session should start with:
+- The next P1 item (e.g. R14 smoke tests, R15 drift, R16 error leakage). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-09-29 — R10, R11, R9 done: Streamlit↔API contract, fake Advanced-tab response removed, API contract + grid-path test (3 code commits)
 
 Done:
