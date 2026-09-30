@@ -28,8 +28,9 @@ pricing:
   default_method: grid_search
   
 training:
+  # Validation set = most recent `test_size` fraction of the timeline.
+  # The split is chronological (DECISIONS D6), so there is no `random_state`.
   test_size: 0.2
-  random_state: 42
   model_dir: models
   report_dir: reports
   # Enable cross-validation (can be slow)

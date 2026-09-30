@@ -105,9 +105,12 @@ class FeatureBuilder:
         # Target
         df["y_units_sold"] = df["units_sold"]
 
-        # Feature columns
+        # Feature columns. `product_id` is intentionally absent: it is a raw
+        # identifier that lets the model memorize per-product means and cannot
+        # generalize to an unseen product (DECISIONS D5 / ROADMAP R12). It is
+        # still used above to group the lag/rolling features.
         feature_cols = [
-            "product_id", "date",
+            "date",
             "price", "competitor_price",
             "price_ratio", "price_diff_pct", "price_advantage",
             "log_price", "log_comp_price",
@@ -131,7 +134,9 @@ class FeatureBuilder:
         after = len(df)
         logger.info(f"Dropped {before - after} rows due to insufficient history.")
 
-        return df[feature_cols].sort_values(["product_id", "date"])
+        # Sort by product/date first (product_id is still present here), then
+        # select the model columns — which no longer include product_id.
+        return df.sort_values(["product_id", "date"])[feature_cols]
 
     def save_features(self, df: pd.DataFrame, filename: str = "training_features.parquet") -> Path:
         FEATURE_DATA_DIR.mkdir(parents=True, exist_ok=True)

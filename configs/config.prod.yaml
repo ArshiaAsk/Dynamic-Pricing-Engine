@@ -28,7 +28,6 @@
    
  training:
    test_size: 0.2
-   random_state: 42
    model_dir: models
    report_dir: reports
    run_cv: false

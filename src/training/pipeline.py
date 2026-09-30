@@ -27,13 +27,22 @@ class TrainingPipeline:
         logger.info("=" * 60)
         
         # Load and prepare data
-        dataset = DatasetBuilder(self.feature_path)
+        test_size = self.config.get("training", {}).get("test_size", 0.2)
+        dataset = DatasetBuilder(self.feature_path, test_size=test_size)
         df = dataset.load()
         X, y, features = dataset.build(df)
-        X_train, X_val, y_train, y_val = dataset.split(X, y)
-        
+        # Chronological split (DECISIONS D6): train on the past, validate on the
+        # most recent period. No shuffling.
+        X_train, X_val, y_train, y_val = dataset.split(X, y, df["date"])
+
         logger.info(f"Training samples: {len(X_train)}, Validation samples: {len(X_val)}")
         logger.info(f"Features: {len(features)}")
+        logger.info(
+            f"Chronological split — train dates {df.loc[X_train.index, 'date'].min().date()}"
+            f"..{df.loc[X_train.index, 'date'].max().date()}, "
+            f"validation dates {df.loc[X_val.index, 'date'].min().date()}"
+            f"..{df.loc[X_val.index, 'date'].max().date()}"
+        )
 
         # Build and train model
         trainer = DemandModelTrainer(self.config["model"])

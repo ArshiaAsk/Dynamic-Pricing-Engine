@@ -66,10 +66,14 @@ def main():
         tracker.log_params(config["model"])
 
         # Load data
-        dataset = DatasetBuilder(config["data"]["feature_path"])
+        dataset = DatasetBuilder(
+            config["data"]["feature_path"],
+            test_size=config.get("training", {}).get("test_size", 0.2),
+        )
         df = dataset.load()
         X, y, features = dataset.build(df)
-        X_train, X_val, y_train, y_val = dataset.split(X, y)
+        # Chronological split (DECISIONS D6 / ROADMAP R12): no shuffling.
+        X_train, X_val, y_train, y_val = dataset.split(X, y, df["date"])
 
         logger.info(f"Training samples: {len(X_train)}, Validation samples: {len(X_val)}")
 
