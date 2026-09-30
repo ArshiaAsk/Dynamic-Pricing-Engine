@@ -5,7 +5,7 @@ Ongoing log of decisions that shape this project. Each entry is one decision.
 
 **Reference commits:** Ground truth verified against commit `c32841f` (see `.agents/STATE.md`). This planning revision sits on top of the working tree at the current commit (see `git log -1`); no new commit was created for these `.agents/` edits.
 
-Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, and D15 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29, at the owner's direction); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
+Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D5, D6, and D15 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30, at the owner's direction); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
 
 ---
 
@@ -38,15 +38,15 @@ Decision: Define the serving feature set once and have both optimizers consume i
 Consequences: Requires ROADMAP R4 and a test asserting both optimizers emit identical feature vectors; any feature added to training must be added to the serving builder in the same PR.
 
 ## D5: Drop `product_id` as a model feature
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-09-30)
+Status: accepted
 Context: `product_id` is a raw model feature (`models/features.json:2`), so the model partly memorizes per-product means and cannot price an unseen product.
 Decision: Remove `product_id` from the feature set (or replace it with an out-of-fold target encoding if product-level signal must be retained), and retrain.
 Consequences: Requires ROADMAP R12 and a metric re-report; rules out claiming the model generalizes to new products while `product_id` remains a raw feature.
 
 ## D6: Use a chronological train/validation split
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-09-30)
+Status: accepted
 Context: The pipeline uses `train_test_split(shuffle=True)` but the README calls it "time-series validation" (STATE.md §1).
 Decision: Split chronologically (hold out the last N days) and report the split honestly in the README.
 Consequences: Requires ROADMAP R12 and updated metrics; the reported R² will likely change and must be regenerated, not carried over.
@@ -186,4 +186,4 @@ Consequences: Requires ROADMAP R7/R9/R30; rules out adding pricing or API code w
 
 ---
 
-Last updated: 2026-09-28, against commit c32841f (see `.agents/STATE.md`).
+Last updated: 2026-09-30 (D5/D6 accepted; see `.agents/STATE.md`).
