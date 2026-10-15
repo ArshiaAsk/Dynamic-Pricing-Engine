@@ -69,8 +69,6 @@ reports/*.json
 .DS_Store
 Thumbs.db
 
-# Docker
-
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
