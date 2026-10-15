@@ -7,7 +7,6 @@ from threading import Lock
 import time
 
 from src.pricing.optimizer import PriceOptimizer
-from src.pricing.model_loader import load_production_model
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
