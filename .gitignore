@@ -70,7 +70,6 @@ reports/*.json
 Thumbs.db
 
 # Docker
-.dockerignore
 
 # Jupyter
 .ipynb_checkpoints/

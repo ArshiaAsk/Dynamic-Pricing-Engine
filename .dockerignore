@@ -1,0 +1,74 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov/
+.tox/
+
+# IDEs
+.vscode
+.idea
+.cursor
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+docs/
+
+# Logs
+logs/
+*.log
+
+# Data (exclude from image, mount as volume)
+data/raw/*
+data/processed/*
+mlruns/
+mlflow.db
+
+# Local config (never bake into the image)
+.env
+
+# Backups
+backups/
+*.db.backup
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+
+# Notebooks
+notebooks/
+*.ipynb
+
+# Reports
+reports/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
