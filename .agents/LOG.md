@@ -17,6 +17,31 @@ Next session should start with:
 
 ---
 
+## 2026-10-15 — R22 done: all dead code deleted, import-graph test added, D9/D10/D12 accepted; R29 partly resolved
+
+Done:
+- **C0 `55ae934` — `docs(agents): accept D9, D10, D12 (R22)`.** `.agents/DECISIONS.md` only: D9/D10/D12 → `Status: accepted` (accepted 2026-10-15), header accepted-list updated, and the D9 "Implementation note (user decision, 2026-10-15)" recording that the local untracked `data.db` is **not** deleted (the owner will remove it). D4/D8/D11 untouched.
+- **C1 `0b73403` — `test(optimizer): assert the inventory cap on the live optimizer path (R22 prerequisite)`.** `tests/test_optimizer.py` (+ real-model fixtures) and `tests/test_api.py` each compute the unconstrained optimum, assert the cap is binding (unconstrained demand > limit), then assert `expected_demand <= inventory_limit` on the live path. **Mutation check (throwaway `/tmp/r22_mut`, cap disabled at `src/pricing/optimizer.py:48-49`):** both new tests **FAIL** (`assert 80.53225708007812 <= 40`); real repo → **2 passed**. Suite 102 → **104 passed, 2 skipped**.
+- **C2 `c4b9fb1` — `refactor(pricing): delete the unreachable BayesianPriceOptimizer and its tests (D1/D2, R22)`.** Deleted `src/pricing/bayesian_optimizer.py` (216 lines); removed `TestBayesianOptimizer` (3), the 5 Bayesian tests in `tests/test_optimizer_real.py`, and the 2 "both optimizers" tests in `tests/test_serving_features.py`; edited `test_exactly_one_function_computes_price_dependent_features` to reference only `optimizer.py`; updated docstrings. Coverage-preservation table: **no row NONE** (inventory-cap → the C1 tests; near-optimality → the kept R2/R6 tests; margin → `test_api::test_optimize_with_constraints`; schema → `test_grid_path_response_contract`). Evidence: `grep` NO MATCHES; `IMPORT_OK`; `pytest tests/test_optimizer_real.py -v` → **7 passed**; R7 served ratios (kept live tests) 1.00048 / 0.99991 / 1.00000 / 1.00000 / 1.00077. Suite **104 → 88 passed, 0 skipped** (predicted 106 − 18 = 88; the 2 removed skips were the Bayesian bound-hugging parametrizations). **Process note:** the first commit attempt staged only the deletion (a combined `git add` failed on the deleted path), leaving a red commit; it was redone with `git reset --soft HEAD~1` + one green commit (not `git commit --amend`).
+- **C3 `3b51851` — `refactor: delete orphan modules revenue, metrics_tracker, optimize, feature_pipeline (D12, R22)`.** No importer/test for any; `IMPORT_OK`; `src.monitoring.prediction_logger`/`src.features.feature_builder` still import. Suite **88 passed**.
+- **C4 `026ed00` — `refactor(utils): delete the unused config loader (D12, R22)`.** `src/utils/config.py`; its only importer (`feature_pipeline`) was deleted in C3. `env_config.py` untouched. Suite **88 passed**.
+- **C5 `87fdf8a` — `refactor(data): delete the SQLite ingestion chain and DB scripts (D9/D12, R22/R29)`.** Deleted `src/data/{ingest,pipeline_runner,validation}.py` + `scripts/{backup,restore}_database.sh`. Pre-deletion repo-wide `grep` for `backup_database|restore_database|ingest|pipeline_runner|data.validation` → only `.agents/*` and `README.md` prose; the STOP-check (`start.sh`/`Dockerfile*`/compose/`scripts/*`/`tests`/`.github`) → **no matches**. `data.db` **untouched** (untracked/ignored). **Flag:** `sqlalchemy==2.1.4` (`requirements.txt:30`) is now an unused declared dependency (out of scope). Suite **88 passed**.
+- **C6 `849a866` — `refactor(pricing): drop the unused model_loader and its import (D12, R22)`.** Deleted `src/pricing/model_loader.py` and only `engine.py:10`; `load_production_model` had no caller. `pytest tests/test_mlflow_registry.py -v` → **4 passed**. Suite **88 passed**.
+- **C7 `49243af` — `refactor(api): delete never-raised error subclasses (R22)`.** Removed `ModelNotFoundError`/`OptimizationError`/`InvalidInputError`; kept `APIError` + its registered handler. **Flag:** nothing raises `APIError` and no test references it (`server.py:16,41` register the handler) — kept per instruction. Suite **88 passed**.
+- **C8 `fb5e2a5` — `refactor: delete dead symbols log_prediction, load_logs, get_env, EcommerceDataGenerator.run (D12, R22)`.** `PredictionLogger.log_prediction`/`load_logs` (kept the class; also dropped the now-unused `import pandas as pd`), `EnvConfig.get_env`, generator `run()` + its `__main__`. Each grep proved no caller. Suite **88 passed**.
+- **C9 `e8da719` — `test(arch): assert every module under src/ is reachable from an entry point (R22)`.** New `tests/test_import_graph.py` (AST-only; roots `src.api.server` + `src.training.train` + the `src.*` imports of `scripts/*.py`/`app.py`; empty, rot-proof allowlist). **Convention 18:** extracted `62333ea` to `/tmp/r22_before`, copied the test in, ran with `.venv` python → **FAILS** listing 11 dead modules (`src.data.ingest`, `pipeline_runner`, `validation`, `features.feature_pipeline`, `features.transformer`, `monitoring.metrics_tracker`, `pricing.bayesian_optimizer`, `pricing.integrated_optimizer`, `pricing.optimize`, `pricing.revenue`, `utils.config`); passes on HEAD. Suite → **90 passed, 0 skipped**.
+- **C10 (this commit) — docs.** `STATE.md` (§3 emptied; unit-tests row → **90 passed, 0 skipped**, recording 18 removed / 4 added and the one ported property = inventory cap; `Last verified` → `e8da719`), `ROADMAP.md` (**R22 → done** with the committed disposition table + coverage-preservation note + acceptance-criteria coverage; **R29 → in-progress** with the removal/remaining record; **R23** new stale-README note; D4/D8/D11 still `proposed`; `Last updated`), `LOG.md` (this entry). Only these three docs.
+
+Left open / blocked:
+- **R29 stays `in-progress`** — the local untracked `data.db` remains (the owner deletes it) and the README DB claims remain for R23.
+- **Flags:** `sqlalchemy` is now an unused declared dependency; `APIError` is never raised and no test references it (kept); the C2 staging redo (see C2).
+- **D4/D8/D11 remain `proposed`** and were not implemented.
+
+Next session should start with:
+- R23 (README truth pass — the DB/ingestion/validation/backup sentences and the `"bayesian"` strings) or the remaining P2 items per `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-15 — R22 group 1 done (integrated_optimizer/transformer deleted); R22 group 2 blocked on a coverage gap; R14 follow-up; docs
 
 Done:
