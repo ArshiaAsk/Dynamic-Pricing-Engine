@@ -340,10 +340,15 @@ P2 = R27–R33 (7 items). Total: 35 items.
 
 ### R21 — `requirements.txt` correctness
 - **Priority:** P1
-- **Status:** todo
+- **Status:** in-progress
 - **Files touched:** `requirements.txt`
 - **Acceptance criteria:** In a fresh venv, `pip install -r requirements.txt && pip check` succeeds. `requests` appears exactly once. `sqlalchemy` is either declared (if `ingest.py` is kept) or `ingest.py` is deleted. `shap`, `prometheus-client`, and linters are either actually used (verified by grep) or removed.
 - **Depends on:** R3
+- **Evidence (2026-10-13, code commit `c444973`) — change complete, literal acceptance blocked by network:**
+  - **Edits:** `requests` deduped (appeared on lines 26 and 35 → once). Removed `prometheus-client` and `shap` (repo-wide grep for `import`/`from` → 0 hits; STATE.md §1 marks Prometheus FAKE-OR-DEAD). Removed the linters `flake8`/`black`/`isort`/`mypy` (0 imports, no `.flake8`/`setup.cfg`/`pyproject.toml`/`mypy.ini`, no CI). Declared `sqlalchemy>=2.0.0` (kept `src/data/ingest.py`, which imports it directly — the "declare" branch). Added the R5 `protobuf==4.25.9` pin (see DECISIONS D16).
+  - **Resolution verified:** `pip install --dry-run --report` (metadata only) → **exit 0, 116 packages resolved with no conflict**; the report shows `protobuf 4.25.9` honoured and **no** `prometheus-client`/`shap`/`flake8`/`black`/`isort`/`mypy` in the resolved set.
+  - **Literal acceptance NOT run — why:** `pip install -r requirements.txt` in a fresh venv requires downloading the full wheel set, but this environment throttles `files.pythonhosted.org` to **~40–60 KB/s with stalls** (measured: 1.8 MB in 28.9 s; a 10.8 MB wheel took ~256 s). The install ran 32 min and had installed nothing (still resolving/downloading) before being stopped. `pip check` therefore could not be observed on a real fresh venv. **Remaining to close R21:** run `python -m venv /tmp/v && /tmp/v/bin/pip install -r requirements.txt && /tmp/v/bin/pip check` on an unthrottled network.
+  - **Follow-up noted (not changed here):** `xgboost>=2.0.0` now resolves to **3.4.1**, which on Linux requires `nvidia-nccl-cu13` (**291 MB**); the tested env (STATE.md) is xgboost 3.2.0. Worth pinning in a follow-up if image size matters.
 
 ### R22 — Dead code: delete or wire+test, file by file
 - **Priority:** P1
@@ -361,18 +366,28 @@ P2 = R27–R33 (7 items). Total: 35 items.
 
 ### R24 — nginx: add a real config or remove the service
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `docker-compose.prod.yml:45-61`, `nginx/nginx.conf` (new)
+- **Status:** done
+- **Files touched:** `docker-compose.prod.yml` (nginx service removed; `environment:` indentation fixed), `README.md` (3 nginx claims struck)
 - **Acceptance criteria:** `docker compose -f docker-compose.prod.yml config` succeeds; `up` starts nginx and `curl http://localhost:80/v1/health` returns 200 through the proxy. **OR** the nginx service block is removed and the README nginx claim is deleted.
 - **Depends on:** R3, R5
+- **Evidence (2026-10-13, code commit `a1eb669`) — remove branch (DECISIONS D17, accepted):**
+  - **nginx service removed** from `docker-compose.prod.yml` (the whole `nginx:` block, incl. the `./nginx/nginx.conf` + `./nginx/ssl` bind mounts); `grep -rin nginx README.md docker-compose.prod.yml` → **no matches**; `ls nginx` → **No such file or directory**.
+  - **README claims struck:** the three nginx mentions (What You Get `README.md:21`, Containerization `:42`, repo tree `:72`) are gone; the tree's last entry is now `└── docker-compose.prod.yml`.
+  - **`docker compose -f docker-compose.prod.yml config` → exit 0** (rendered services: `pricing-api` only).
+  - **Regression fixed:** the R35 commit (`5a8f887`) had corrupted the `environment:` indentation, making the file invalid YAML (`yaml: line 3: did not find expected key`). This commit normalizes the file; `config` now exits 0. (Pre-R35 the file was valid — verified with `git show 90039b2:docker-compose.prod.yml | docker compose -f - config` → exit 0.)
 
 ### R25 — Docker build/compose works from a clean checkout
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `Dockerfile:1`, `docker-compose.yml:35-48`, `requirements.txt` (minimal `protobuf` pin — see Note)
+- **Status:** in-progress
+- **Files touched:** `Dockerfile:1`, `Dockerfile.hf:3`, `Dockerfile.prod:2,17`, `docker-compose.yml:35-40`, `requirements.txt` (protobuf pin — done in R21)
 - **Acceptance criteria:** `docker compose build && docker compose up -d` succeeds using a standard public base image (no `docker.arvancloud.ir` or other private mirror), and `curl http://localhost:8000/v1/health` returns 200. `pricing-api` has a `build:` context. The base image Python version matches the interpreter used and tested (3.12 — see DECISIONS D16); the current Dockerfiles pin 3.10 and must be bumped.
 - **Depends on:** R3, R13
 - **Note:** A clean-checkout build also depends on the R5 `protobuf` pin landing in `requirements.txt`. R5 made `import mlflow` work by installing `protobuf==4.25.9` (plus `setuptools<81`) into the venv; `requirements.txt` carries neither, so a fresh image fails `pip check`/`import mlflow` exactly as it did pre-R5. R25 must pull that minimal `protobuf` pin into `requirements.txt` (or R21 — `requirements.txt` correctness — must land first). See DECISIONS D16 consequences.
+- **Evidence (2026-10-13, code commit `ce4f2e7`) — change complete, acceptance NOT met (network):**
+  - **Edits:** all three Dockerfiles switched off the `docker.arvancloud.ir` mirror to the public **`python:3.12-slim`** (`Dockerfile:1`, `Dockerfile.hf:3`, `Dockerfile.prod:2,17` — builder + final), matching the verified interpreter (3.12.3). `docker-compose.yml` `pricing-api` gained a `build: {context: ., dockerfile: Dockerfile}` context, so the stack no longer needs a pre-built image.
+  - **Verified:** the public base image pulls (`docker pull python:3.12-slim` → downloaded, no arvancloud/private registry). `docker compose config` renders `pricing-api.build.context = <repo>` and `dockerfile: Dockerfile`. The build itself starts correctly: `docker compose build --progress=plain` reaches `#6 [1/5] FROM docker.io/library/python:3.12-slim@sha256:…`, then `#7 WORKDIR`, `#8 COPY requirements.txt .`, `#9 RUN pip install -r requirements.txt`, and resolves the dependency graph from PyPI.
+  - **Acceptance NOT met — why:** step `#9` must download the full wheel set, but this environment throttles `files.pythonhosted.org` to **~40–61 KB/s** (measured in-build: pandas 10.8 MB in ~256 s; the log's progress bars read `39.9 kB/s`, `61.3 kB/s`). After 19 min the build had downloaded only a handful of wheels and was still on `numpy`; with `xgboost 3.4.1` alone pulling `nvidia-nccl-cu13` (**291 MB**), completion would take hours. The build was stopped. `docker compose up -d` + `curl localhost:8000/v1/health` were therefore never reached.
+  - **Remaining to close R25:** run `docker compose build && docker compose up -d && curl http://localhost:8000/v1/health` on an unthrottled network (expect 200). No code change is pending; only the verification is outstanding.
 
 ### R26 — Bounded startup in `start.sh`
 - **Priority:** P1
@@ -485,4 +500,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-10-13, against commit 7cdbf56 (D16/D17 accepted → R24/R25 back to `todo`, R25 notes the `protobuf`-pin dependency; R35 config collapse `5a8f887` + R26 bounded `start.sh` wait loops `7cdbf56` done; R35 was added earlier this day, DECISIONS D26; R18, R19, R20 done 2026-10-08; R15–R17 done earlier; R1–R13 before that; see `.agents/STATE.md`).
+Last updated: 2026-10-13, against commit ce4f2e7 (R24 nginx removed `a1eb669` → **done**; R21 `requirements.txt` `c444973` and R25 Docker `ce4f2e7` changes committed but left **in-progress** — their acceptance is blocked by ~40 KB/s PyPI throttling in this environment; earlier same day: D16/D17 accepted, R35 config collapse `5a8f887`, R26 bounded `start.sh` loops `7cdbf56`; R18–R20 done 2026-10-08; see `.agents/STATE.md`).

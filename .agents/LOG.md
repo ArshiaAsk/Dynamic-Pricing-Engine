@@ -17,6 +17,26 @@ Next session should start with:
 
 ---
 
+## 2026-10-13 — R24 done (nginx removed); R21 + R25 code done but left in-progress (PyPI throttled) (3 code commits + this docs commit)
+
+Done:
+- **R24 — `done`. Code commit `a1eb669`** ("fix(compose): remove nginx service from prod stack + README claims (R24)"). DECISIONS D17 (accepted): removed the whole `nginx:` service from `docker-compose.prod.yml` (incl. the missing `./nginx/nginx.conf` + `./nginx/ssl` bind mounts) and struck the three README nginx claims (What You Get, Containerization, repo tree). `grep -rin nginx README.md docker-compose.prod.yml` → none; `ls nginx` → no such directory. **`docker compose -f docker-compose.prod.yml config` → exit 0** (services: `pricing-api` only). Also repaired a **regression I introduced in R35 (`5a8f887`)**: the `environment:` indentation there made the file invalid YAML (`yaml: line 3: did not find expected key`); confirmed it was valid pre-R35 (`git show 90039b2:docker-compose.prod.yml | docker compose -f - config` → exit 0).
+- **R21 — code done, left `in-progress`. Code commit `c444973`** ("fix(deps): correct requirements.txt …"). Deduped `requests`; removed `prometheus-client` + `shap` (0 imports repo-wide) and the linters `flake8`/`black`/`isort`/`mypy` (0 imports, no config, no CI); declared `sqlalchemy>=2.0.0` (kept `ingest.py`, which imports it directly); added the R5 `protobuf==4.25.9` pin. Resolution verified with `pip install --dry-run --report` → **exit 0, 116 packages, no conflict**; protobuf 4.25.9 honoured and the removed deps absent. **The literal acceptance could not be run:** PyPI (`files.pythonhosted.org`) is throttled to **~40–60 KB/s with stalls** here, so a fresh-venv `pip install -r requirements.txt && pip check` cannot complete (the install ran 32 min, installing nothing). Remaining step: the fresh-venv install on an unthrottled network.
+- **R25 — code done, left `in-progress`. Code commit `ce4f2e7`** ("build(docker): public python:3.12-slim base + compose build context (R25)"). Per D16: all Dockerfiles → public **`python:3.12-slim`** (`Dockerfile:1`, `Dockerfile.hf:3`, `Dockerfile.prod:2,17`); `docker-compose.yml` `pricing-api` gained a `build:` context. Verified: the public base image pulls; `docker compose config` renders the build context; `docker compose build --progress=plain` reaches `#6 [1/5] FROM docker.io/library/python:3.12-slim@sha256:…` and runs `#9 RUN pip install -r requirements.txt`. **Acceptance NOT met:** step #9 downloads the full wheel set but is throttled to ~40–61 KB/s (in-build: pandas 10.8 MB ≈ 256 s), and `xgboost 3.4.1` alone pulls `nvidia-nccl-cu13` (**291 MB**) — completion would take hours, so the build was stopped after 19 min and `docker compose up -d` + `curl localhost:8000/v1/health` were never reached. Remaining step: build/up/curl on an unthrottled network.
+- **Env fix (outside the repo):** Docker Hub pulls failed with `error getting credentials - err: exec: "docker-credential-desktop": executable file not found`. Root cause: `~/.docker/config.json` had `"credsStore": "desktop"` with no helper installed. Backed it up to `~/.docker/config.json.bak` and removed the stale `credsStore` (anonymous pulls need no helper); `docker pull python:3.12-slim` then succeeded.
+- **Docs (this commit):** ROADMAP R24 → `done` with evidence; R21/R25 kept `in-progress` with the exact blocking reason; `Last updated` → `ce4f2e7`. STATE.md — §1 Docker-deployment row (public 3.12 base + build context; build unverified) and Nginx row (REMOVED, R24/D17), §5.10 + §5.18 struck as fixed, top protobuf note (R21 pin), `Last verified` → `ce4f2e7`.
+- **Commits:** one per task, no amends, no combining — `a1eb669` (R24), `c444973` (R21), `ce4f2e7` (R25), plus this docs commit. All on `main`.
+
+Left open / blocked:
+- **R21** and **R25** are code-complete but unverified: their acceptance requires downloading the full dependency set, which this environment throttles to ~40 KB/s (with stalls). Neither is marked done. Re-run on an unthrottled network: (R21) fresh venv `pip install -r requirements.txt && pip check`; (R25) `docker compose build && docker compose up -d && curl http://localhost:8000/v1/health`.
+- **Follow-up found (not changed):** `xgboost>=2.0.0` resolves to 3.4.1, which pulls `nvidia-nccl-cu13` (291 MB) on Linux (STATE's tested env is xgboost 3.2.0); `mlflow>=2.9.0` resolves to 3.17.1 in a fresh install, whereas the R5-validated version is 2.12.1. Pinning both would shrink the image and match the tested env — a candidate for an R21/R25 follow-up.
+- README still carries stale non-nginx claims (e.g. `README.md:66` "configs/ # Environment-based configuration (dev/prod)", the AWS/CI claims) — owned by R23.
+
+Next session should start with:
+- Re-run R21's and R25's acceptance on an unthrottled network (code already committed) and flip them to `done`, or pick the next unblocked P1 item (R22, R23, R14, R34). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-13 — Docs-only: accept D16/D17; R24/R25 back to `todo` (1 docs commit)
 
 Done:
