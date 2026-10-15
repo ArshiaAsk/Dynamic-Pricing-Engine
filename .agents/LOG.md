@@ -17,6 +17,28 @@ Next session should start with:
 
 ---
 
+## 2026-10-14 — D28 implemented (mlflow.db untracked) + Dockerfile BuildKit pip cache (R25); R21 done (user-verified fresh venv); C2 stopped+flagged
+
+Done:
+- **D28 accepted and implemented.** Commits: `ad64722` (docs: accept D28), `93bf8da` (chore(git): untrack `mlflow.db` + ignore it), `88b1e86` (build(docker): BuildKit pip cache mount — the user's Dockerfile change), plus this docs commit. All on `main`, one commit per step, no amends, no branches. **C2 was STOPPED and flagged** (below) — no commit.
+- **C0 `ad64722` — D28 recorded in `.agents/DECISIONS.md`** (Status: `accepted`, date 2026-10-14) with the untrack/ignore + `.dockerignore` 42-43 decision and its rationale (D27 pointed `promote_model.py` at `mlflow.db`; a tracked binary would change on every promote; its content is stale — 2 runs, `demand_forecasting_model` v1/v2, no alias, machine-specific artifact paths under the gitignored `mlruns/`); header accepted-list and `Last updated` refreshed. Only that file.
+- **C1 `93bf8da` — `mlflow.db` untracked and gitignored.** Recorded `sha256sum mlflow.db` = `6ae4f9c5ce227187bb0a6212ad7ea0662b8b1b6fa4cfb3bd9a8c442901b61ba8` (188,416 bytes, mtime Jun 6 14:50). New `tests/test_repo_hygiene.py::test_gitignore_ignores_mlflow_db` parses `.gitignore` and asserts an entry exactly `mlflow.db` (no `git` call): **before** 1 failed, **after** 1 passed. `git rm --cached mlflow.db` + `.gitignore:81` `mlflow.db` (next to the `mlruns/` entry, same `# MLflow` section). Verified: `git check-ignore -v mlflow.db` → `.gitignore:81:mlflow.db`; `git ls-files | grep -i mlflow.db` → empty; `ls -l mlflow.db` still 188,416 bytes; `sha256sum` unchanged. No history rewrite; file stays on disk.
+- **C2 STOPPED and flagged (no commit).** The C2 test (no non-blank `.dockerignore` line has leading/trailing whitespace) was added and **fails for all 58 non-blank lines**, not just 42-43 — the whole file is indented by one leading space (verified: `awk` lead=1 on all 71 lines; `grep -cP '^ '` = 71). Per the instruction ("if the test fails for lines other than 42-43 after your fix, flag it and stop instead of editing them") only lines 42-43 were de-indented (kept on disk) and the test was reverted so the suite stays green. **Second blocker:** `.dockerignore` is **untracked and gitignored** (`.gitignore:73`; `git ls-files .dockerignore` empty, `git log -- .dockerignore` empty), so C2's "commit only `.dockerignore` and the test file" is impossible without `git add -f` or a `.gitignore` edit — both out of scope.
+- **C3 `88b1e86` — the user's Dockerfile change committed** (BuildKit pip cache mount + `--default-timeout=120 --retries 10`), with the dead `# RUN pip install -r requirements.txt` line deleted. Commit body records the user's successful `docker compose build` (1590 s, throttled network, 2026-10-14). `Dockerfile.hf`/`Dockerfile.prod` untouched.
+- **C4 (this commit) — docs.** ROADMAP **R21 → `done`**; **R25 stays `in-progress`**; STATE Docker-deployment row, MLflow row, test-count row and `Last verified` refreshed; ROADMAP `Last updated` → `88b1e86`.
+- **R21 acceptance verified by the user (2026-10-14, fresh venv `/tmp/v`, `pip install -r requirements.txt`):** `pip check` → **"No broken requirements found." (exit 0)**; freeze confirms `mlflow==3.17.1`, `mlflow-skinny==3.17.1`, `mlflow-tracing==3.17.1`, `opentelemetry-proto==1.27.0`, `protobuf==4.25.9`, `xgboost-cpu==3.4.1`, **no `nvidia-*`**; static criteria also hold (`requests` once at `:27`; `sqlalchemy==2.1.4` at `:30` with `ingest.py` kept; `shap`/`prometheus-client`/linters absent). All four acceptance criteria covered → **R21 done**.
+- **R25 user-run facts (2026-10-14):** `docker compose build` **succeeded** (1590 s); `docker compose up -d` started `mlflow-db`, `mlflow-server` (`python:3.10`) and `pricing-api`; `docker compose ps` showed all three **Up for 7 min**; API logs show **4 workers** with `Application startup complete`. Inside the image `models/` has `demand_model.pkl` + `features.json` and **no `mlflow.db`/`mlruns/`** (`.dockerignore` effective); API startup logs an XGBoost "older version" pickle warning. **`curl http://localhost:8000/v1/health` and `:5000/health` from the host returned HTTP 000** — cause under diagnosis (candidates: host proxy env, server bound to `127.0.0.1` in-container, mlflow still installing). R25 not marked done.
+
+Left open / blocked:
+- **C2 (`.dockerignore` whitespace) is stopped and needs the owner's decision:** the whole file is indented, and `.dockerignore` is gitignored/untracked. D28's `.dockerignore` half is applied on disk (lines 42-43 only) but not committed.
+- **R25 remains `in-progress`:** the health-check reachability (HTTP 000) is unresolved.
+- Flagged, not fixed: `.dockerignore` is untracked while `.gitignore:73` lists it; the mlflow compose service still uses `python:3.10` and the obsolete `version` key.
+
+Next session should start with:
+- Diagnose R25's HTTP 000 (host proxy / in-container bind / mlflow readiness), and decide how to handle `.dockerignore` (track it, or drop the whole-file hygiene test). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-13 — D27 dependency pin policy implemented (4 code commits + 2 docs commits; R21/R25 stay in-progress)
 
 Done:
