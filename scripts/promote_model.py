@@ -6,7 +6,10 @@ not used: stages are deprecated in favour of aliases, and the engine resolves
 the ``production`` alias (with a ``stage=Production`` tag as a fallback).
 
 The tracking URI comes from ``MLFLOW_TRACKING_URI`` and defaults to this repo's
-local file store (``mlruns/``), which is the registry the engine reads.
+sqlite store (``mlflow.db``) — the same database ``start.sh``'s MLflow server
+uses (``--backend-store-uri sqlite:///mlflow.db``) — which is the registry the
+engine reads. A sqlite default is required because mlflow 3.x refuses the
+filesystem backend unless ``MLFLOW_ALLOW_FILE_STORE`` is set.
 """
 import os
 from pathlib import Path
@@ -17,7 +20,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _tracking_uri() -> str:
-    default = f"file://{REPO_ROOT / 'mlruns'}"
+    # sqlite:////<absolute path> — four slashes: scheme, empty host, then the
+    # absolute filesystem path.
+    default = f"sqlite:///{REPO_ROOT / 'mlflow.db'}"
     return os.getenv("MLFLOW_TRACKING_URI", default)
 
 
