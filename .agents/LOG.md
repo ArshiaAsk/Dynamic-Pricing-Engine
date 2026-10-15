@@ -17,6 +17,21 @@ Next session should start with:
 
 ---
 
+## 2026-10-08 — Docs-only follow-up: mark DECISIONS D13 `accepted` (implemented via R15) (1 docs commit)
+
+Done:
+- **DECISIONS D13** ("Drop drift detection and performance-monitoring claims for the demo") status `proposed` → `accepted`, with the note **"Accepted 2026-09-29 retroactively, implemented via R15"** recorded in its Consequences (same style as D15's acceptance note). D13 was effectively decided and implemented by R15's delete branch this session; the header accepted-list and the file's `Last updated` line were refreshed accordingly.
+- No other decision was touched. The prior entry's "Left open" note that D13 remained `proposed` is superseded by this entry.
+
+Left open / blocked:
+- `configs/config{,.dev,.prod}.yaml` still contain the dead `monitoring:` block (R18 owns it).
+- R14, R18–R26, and R34 remain `todo`.
+
+Next session should start with:
+- The next P1 item (e.g. R14 smoke tests, R18 config hygiene, R34 `product_id`). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-07 — R16, R15, R17 done: no error-text leakage; drift detection deleted; atexit flush replaces `__del__` (3 code commits)
 
 Done:

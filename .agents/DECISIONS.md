@@ -5,7 +5,7 @@ Ongoing log of decisions that shape this project. Each entry is one decision.
 
 **Reference commits:** Ground truth verified against commit `c32841f` (see `.agents/STATE.md`). This planning revision sits on top of the working tree at the current commit (see `git log -1`); no new commit was created for these `.agents/` edits.
 
-Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D5, D6, and D15 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30, at the owner's direction); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
+Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D5, D6, D13, and D15 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30; D13 on 2026-09-29 retroactively, implemented via R15, at the owner's direction); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
 
 ---
 
@@ -95,10 +95,10 @@ Consequences: Requires ROADMAP R22 and an import-graph test; rules out committin
 
 ## D13: Drop drift detection and performance-monitoring claims for the demo
 Date: 2026-09-27
-Status: proposed
+Status: accepted
 Context: `ModelMonitor` (drift + degradation) is never imported, and `tests/test_data_drift.py` asserts that drift exists rather than validating the service.
 Decision: Remove the drift/monitoring modules and tests and strike the claims from the README, unless a real consumer (endpoint/CLI with a passing test) is built instead.
-Consequences: Requires ROADMAP R15 and README honesty (R23); there is no third state where the code stays dead but the claim stays in the docs.
+Consequences: Requires ROADMAP R15 and README honesty (R23); there is no third state where the code stays dead but the claim stays in the docs. **Accepted 2026-09-29 retroactively, implemented via R15** (delete branch chosen on effort/value; `model_monitor.py` + `tests/test_data_drift.py` deleted and README drift claims struck, commit `2746fa8`).
 
 ## D14: One canonical repo root; no nested clone
 Date: 2026-09-27
@@ -186,4 +186,4 @@ Consequences: Requires ROADMAP R7/R9/R30; rules out adding pricing or API code w
 
 ---
 
-Last updated: 2026-09-30 (D5/D6 accepted; see `.agents/STATE.md`).
+Last updated: 2026-10-08 (D13 accepted retroactively, implemented via R15; see `.agents/STATE.md`).
