@@ -87,6 +87,9 @@ If you cannot check a rule, it is not a rule. New rules are appended at the end 
 ### Model-derived reference values
 34. Tests must not hardcode reference values that derive from a model artifact (argmax prices, revenue figures, metrics). Compute them at test time from the loaded artifact and the given inputs, so the test stays valid across retrains. (R7, R12) — `target (after R7)`
 
+### Commit hygiene
+35. Every commit must leave the full test suite green. A config key and the code that reads it go in the same commit (a transient red commit hurts git bisect). Example: commit `ae01b35` added the `data.seed` key without its reader, so the suite was red until `d29dfa8` added the reader. — `enforced (process)`
+
 ---
 
-Last updated: 2026-10-08, against commit c58b6ab (rules 5 and 6 → `enforced` after R18/R19; rules 11, 13, 15 → `enforced` after R15/R16/R17; see `.agents/STATE.md`).
+Last updated: 2026-10-15, against commit a6aad00 (rule 35 added — commit hygiene: every commit leaves the full suite green, and a config key ships with its reader; example `ae01b35` added `data.seed` without a reader and stayed red until `d29dfa8`; see `.agents/STATE.md`).

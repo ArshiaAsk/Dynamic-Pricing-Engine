@@ -17,6 +17,39 @@ Next session should start with:
 
 ---
 
+## 2026-10-15 — R25 closed (clean-clone build + health verified); seed sweep; convention 35; R14/R34 briefs
+
+Done:
+- **C0 (this commit) — docs.** `STATE.md`: the metrics row now records the seed sweep (R² 0.40602–0.50037, mean 0.44650, pop-std 0.02919; MAPE 0.34671–0.37953, mean 0.36080) and the pre-D30 unseeded range (0.4328–0.4750, so 0.475 was one lucky draw) — with the note that the D30 R² shift (≈0.056 ≈ 1.9 seed-σ) is within the seed-to-seed spread; the stale dead-code row (`MlflowTracker.*` "cannot run here") corrected; `Last verified` refreshed. `ROADMAP.md`: **R25 → done** (clean-clone evidence + final covered list + follow-up notes); a **R28** note that `Dockerfile.prod`/`Dockerfile.hf`/the prod `./models:ro` mount ship no model on a fresh clone; `Last updated`. `CONVENTIONS.md`: **rule 35** (every commit leaves the suite green; a config key ships with its reader — example `ae01b35`→`d29dfa8`) and `Last updated`. `LOG.md`: this entry. Only these four files; explicit-path staging; no code/test/Dockerfile/compose edits; `README.md` untouched.
+- **Task A (no commit) — honest metric spread across data seeds.** `git clone --no-hardlinks` → `/tmp/sweep`; for seeds 1–10 and 42, a copy of the clone had only its `configs/config.yaml` `data.seed` changed, then `python scripts/regenerate_data.py && python -m src.training.train` (`.venv` python, `MLFLOW_TRACKING_URI` unset, no `.env`, `MLFLOW_ALLOW_FILE_STORE` never set) and `pytest tests/test_optimizer_real.py -q` inside the copy. Never touched the repo working tree. Every seed: regen rc=0, train rc=0.
+
+  | seed | R² | MAPE | MAE | Train_R2 | R7 (`test_optimizer_real.py`) |
+  |---|---|---|---|---|---|
+  | 1 | 0.430168 | 0.363388 | 23.82 | 0.877289 | 18 passed, 2 skipped |
+  | 2 | 0.500369 | 0.347016 | 21.80 | 0.887087 | 19 passed, 1 skipped |
+  | 3 | 0.406023 | 0.378840 | 24.89 | 0.868634 | 19 passed, 1 skipped |
+  | 4 | 0.437796 | 0.361286 | 23.33 | 0.877851 | 17 passed, 3 skipped |
+  | 5 | 0.481213 | 0.355323 | 22.42 | 0.883245 | 19 passed, 1 skipped |
+  | 6 | 0.426557 | 0.379533 | 24.81 | 0.866021 | 18 passed, 2 skipped |
+  | 7 | 0.464681 | 0.346707 | 22.06 | 0.870945 | 18 passed, 2 skipped |
+  | 8 | 0.439796 | 0.356891 | 23.25 | 0.873608 | 18 passed, 2 skipped |
+  | 9 | 0.411318 | 0.361696 | 23.36 | 0.871540 | 19 passed, 1 skipped |
+  | 10 | 0.467068 | 0.357364 | 22.84 | 0.881110 | 20 passed, 0 skipped |
+  | 42 | 0.419302 | 0.350931 | 22.70 | 0.869708 | 18 passed, 2 skipped |
+
+  **R² (seeds 1–10):** mean **0.44650**, pop-std **0.02919** (sample-std 0.03077), min **0.40602** (seed 3), max **0.50037** (seed 2). **MAPE (seeds 1–10):** mean **0.36080**, pop-std **0.01063**, min **0.34671** (seed 7), max **0.37953** (seed 6). **Seed 42** (the configured seed): R² **0.41930** / MAPE **0.35093** — 3rd-lowest R² of 11. **No seed made any R7 test fail** (0 failures/errors everywhere; the 0–3 skips are the R1 bound-hugging cases, which vary with the model). Total wall time ≈1 min 51 s (well inside the 20-min budget).
+- **Task B (no commit) — read-only briefs for R14 and R34 + smoke collect.** `pytest tests/smoke_tests.py --collect-only -q` and `pytest tests/smoke_tests.py -q` both collect **0 items** (exit 5; no network touched). Full briefs delivered in the session report (not committed).
+
+Left open / blocked:
+- **R14** and **R34** remain `todo` (briefs only; not implemented, per the batch scope).
+- `mlflow-server` :5000 health is still unverified — it is **not** an R25 acceptance criterion (see the R25 follow-up notes in `.agents/ROADMAP.md`).
+- The clean-clone Docker build reused the Docker cache; a **cold** clean-clone build was not re-run (the cold-build evidence is the earlier working-tree 1590 s run).
+
+Next session should start with:
+- Pick up R14 (convert `tests/smoke_tests.py` into a collectable pytest module) or R34 (`product_id` contract), per the briefs. See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-15 — D30 implemented (seeded, reproducible data + model; image builds its own model); R25 stays in-progress
 
 Done:
