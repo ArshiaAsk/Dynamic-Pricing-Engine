@@ -6,7 +6,15 @@ class PricingRequest(BaseModel):
     """Enhanced pricing request with validation"""
     
     # Product info
-    product_id: int = Field(..., ge=0, description="Product ID")
+    product_id: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "Product ID, accepted for request compatibility and logging only. "
+            "It is NOT a model feature and does not influence the predicted "
+            "demand or price."
+        ),
+    )
     
     # Price features
     competitor_price: float = Field(..., gt=0, description="Competitor price")
