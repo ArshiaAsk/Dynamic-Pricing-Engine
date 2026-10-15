@@ -17,7 +17,7 @@ The Dynamic Pricing Engine is a complete, production-ready system for intelligen
 - 🤖 **ML Demand Forecasting**: XGBoost model predicting product demand with ~49% R² accuracy
 - 💰 **Intelligent Price Optimization**: Bayesian optimization to find optimal prices for maximum profit
 - 🚀 **Production API**: FastAPI service for real-time pricing decisions
-- 📊 **Complete Monitoring**: Health checks, metrics, prediction logging, data drift detection
+- 📊 **Complete Monitoring**: Health checks, metrics, prediction logging
 - 🐳 **Docker Deployment**: Multi-stage builds, Nginx reverse proxy, automated deployment
 - 🔒 **Enterprise Security**: Rate limiting, input validation, error handling, non-root containers
 - 📈 **Operations Ready**: Comprehensive monitoring, backup/restore, health checks, logging
@@ -32,7 +32,7 @@ The Dynamic Pricing Engine is a complete, production-ready system for intelligen
 - **Price Optimization**: Multiple methods (Bayesian, grid search) with business constraints
 - **Feature Engineering**: Automated calendar, price, and temporal features
 - **Hyperparameter Tuning**: Optuna-based automated optimization (up to 50 trials)
-- **Model Monitoring**: Data drift detection, performance tracking, prediction logging
+- **Model Monitoring**: Prediction logging
 - **Comprehensive Metrics**: MAE, RMSE, R², MAPE, directional accuracy
 
 ### Production Infrastructure
@@ -338,10 +338,6 @@ training:
   run_cv: false
   run_hyperparameter_tuning: false
   tuning_trials: 50
-
-monitoring:
-  enabled: true
-  drift_threshold: 0.1
 ```
 
 ---
@@ -384,9 +380,6 @@ ls -lh backups/database/
 
 ### Model performance degraded
 ```bash
-# Check data drift
-curl http://localhost:8000/v1/health
-
 # Retrain model
 python scripts/train_with_tuning.py
 
