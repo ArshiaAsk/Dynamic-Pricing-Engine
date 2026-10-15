@@ -33,6 +33,9 @@ services:
     restart: unless-stopped
 
   pricing-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: dynamic-pricing:latest
     container_name: pricing-api
     ports:
