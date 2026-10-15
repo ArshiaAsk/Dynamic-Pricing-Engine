@@ -18,7 +18,7 @@ The Dynamic Pricing Engine is a complete, production-ready system for intelligen
 - 💰 **Intelligent Price Optimization**: Bayesian optimization to find optimal prices for maximum profit
 - 🚀 **Production API**: FastAPI service for real-time pricing decisions
 - 📊 **Complete Monitoring**: Health checks, metrics, prediction logging
-- 🐳 **Docker Deployment**: Multi-stage builds, Nginx reverse proxy, automated deployment
+- 🐳 **Docker Deployment**: Multi-stage builds, automated deployment
 - 🔒 **Enterprise Security**: Rate limiting, input validation, error handling, non-root containers
 - 📈 **Operations Ready**: Comprehensive monitoring, backup/restore, health checks, logging
 - ✅ **Well Tested**: Unit tests, integration tests, smoke tests, and pre-deployment checks
@@ -39,7 +39,7 @@ The Dynamic Pricing Engine is a complete, production-ready system for intelligen
 - **REST API**: FastAPI with automatic Swagger/ReDoc documentation
 - **Monitoring**: Health checks, system metrics (CPU, memory, disk), request tracking
 - **Logging**: Structured JSON logs, prediction audit trail (JSONL), log rotation
-- **Containerization**: Docker with Nginx reverse proxy, resource limits
+- **Containerization**: Docker with resource limits
 - **Database**: SQLite with automated backup/restore (7-day retention)
 - **Error Handling**: Global error handlers, input validation, graceful shutdown
 
@@ -68,8 +68,7 @@ The Dynamic Pricing Engine is a complete, production-ready system for intelligen
 ├── models/               # Trained models & feature metadata
 ├── logs/                 # Prediction logs, metrics
 ├── docker-compose.yml    # Development stack (with reload)
-├── docker-compose.prod.yml # Production stack (optimized)
-└── nginx/                # Nginx configuration for production
+└── docker-compose.prod.yml # Production stack (optimized)
 ```
 
 ---
