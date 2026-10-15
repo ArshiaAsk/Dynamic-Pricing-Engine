@@ -17,6 +17,24 @@ Next session should start with:
 
 ---
 
+## 2026-10-15 — R22 group 1 done (integrated_optimizer/transformer deleted); R22 group 2 blocked on a coverage gap; R14 follow-up; docs
+
+Done:
+- **C1 `7368ef1` — `refactor(pricing): delete integrated_optimizer and transformer (D1, R22)`.** Files (deleted): `src/pricing/integrated_optimizer.py`, `src/features/transformer.py`, `tests/test_integration.py`. **Pre-deletion analysis:** the 5 tests in `tests/test_integration.py` (`test_feature_transformer`, `test_integrated_optimizer`, `test_optimizer_with_constraints`, `test_predict_demand`, `test_evaluate_price_range`) all exercise only the dead `IntegratedPricingOptimizer`/`FeatureTransformer` — neither is on the live path (`PriceOptimizer`/engine/router) — so **no live-path coverage was lost**. **Evidence:** `grep -rn "integrated_optimizer\|features.transformer\|from src.features import" src scripts tests app.py --include=*.py` → **no matches** (only stale, gitignored `.pyc` bytecode matched the unfiltered grep); no `__init__.py` re-export existed in `src/pricing` or `src/features`; `python -c "import src.api.server, src.training.train"` → `IMPORT_OK`; the AST import graph (`/tmp/r22_import_graph.py`) shows the two modules gone and **no other module lost its importer**; suite **107 → 102 passed, 2 skipped, 0 failures**.
+- **C2 — STOPPED (no deletion performed).** The coverage-preservation check failed. The property *"the optimizer caps `expected_demand` at `inventory_limit`"* is a **live-optimizer** property (`src/pricing/engine.py:185,193` → `src/pricing/optimizer.py:48-49`) whose **only** asserting test is the to-be-deleted `tests/test_optimizer.py::TestBayesianOptimizer::test_inventory_constraint` (a **mock** test); **no kept test asserts it on the live path** (`tests/test_api.py::test_optimize_with_constraints` passes `inventory_limit=100` but asserts only the margin). Per the batch gate, C2 was stopped and **no tests were ported**. The other properties the deleted tests assert are covered on the live path (revenue ratio ≥ 0.99 for the five R7 ranges → `tests/test_optimizer_real.py::test_served_grid_optimizer_reaches_reference_optimum[5]` + `tests/test_api.py::test_grid_path_reaches_reference_optimum`; the R1 bound-aware rule and "no gradient method on a tree objective" behaviourally guarded by the same kept ratio tests; serving-features column order → `test_serving_builder_covers_committed_columns_in_order` + `test_grid_optimizer_builds_complete_feature_frame`). Full table in `.agents/ROADMAP.md` R22.
+- **C3 `9f0dc1d` — `fix(scripts): run smoke tests via python3 -m pytest (R14 follow-up)`.** `scripts/run_smoke_tests.sh:39`: `pytest tests/smoke_tests.py -v` → `python3 -m pytest tests/smoke_tests.py -v` (one line). `bash -n scripts/run_smoke_tests.sh` → exit 0. Suite unchanged (**102 passed, 2 skipped**).
+- **C4 (this commit) — docs.** `STATE.md` (removed the `IntegratedPricingOptimizer`/`FeatureTransformer` rows from §3; unit-tests row → **102 passed, 2 skipped (104 collected)**; §3 note on the deletions; `Last verified` → `9f0dc1d`), `ROADMAP.md` (**R22 → `in-progress`** with group 1 done / group 2 blocked; **R23** note that `README.md:157`, `README.md:332`, `scripts/load_test.sh:46` still send/reference `"bayesian"` (HTTP 422 under D2) and `app.py:65-66` shows a "Product ID" input with no help text; `Last updated`), `LOG.md` (this entry). Only these three docs; explicit-path staging; one commit per code step; no branches, no amends.
+- **Task A (read-only, no commit) — decisions dump.** Printed D4/D8/D9/D10/D11/D12 verbatim from `.agents/DECISIONS.md` with impact notes, answered the D8 MLflow-registry question (`src/pricing/engine.py:52` `_resolve_production`, `:77` `load_model`), and printed R28–R32.
+
+Left open / blocked:
+- **R22 group 2 is blocked** on the inventory-cap coverage gap — the owner must decide whether to accept the gap or add a live-path assertion in a later batch.
+- **The rest of R22** (`revenue.py`, `metrics_tracker.py`, `feature_pipeline.py`, `optimize.py`, `src/data/{ingest,pipeline_runner,validation}.py`, `src/utils/config.py`, `model_loader.py`, the dead symbols, the import-graph test + disposition table) is blocked on the `proposed` decisions D4/D8/D9/D10/D11/D12.
+
+Next session should start with:
+- Owner decision on **R22 group 2** (accept the inventory-cap coverage gap, or add a live-path assertion), then continue R22 per `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-15 — R14 + R34 implemented and verified (smoke tests collectable + skip-when-offline; product_id is not a model feature)
 
 Done:
