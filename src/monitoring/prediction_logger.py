@@ -1,4 +1,5 @@
 """Production prediction logging system"""
+import atexit
 import json
 import pandas as pd
 from datetime import datetime
@@ -26,6 +27,11 @@ class PredictionLogger:
             'total_optimizations': 0,
             'avg_response_time_ms': 0.0,
         }
+        # R17: flush remaining entries at interpreter exit via atexit, not in
+        # __del__. Running I/O from __del__ during teardown raises
+        # `ImportError: sys.meta_path is None, Python is likely shutting down`.
+        # atexit callbacks run before module teardown, so the flush is safe.
+        atexit.register(self.flush)
     
     def log_prediction(
         self,
@@ -199,10 +205,6 @@ class PredictionLogger:
                 logger.warning(f"Failed to read {log_file}: {e}")
         
         return pd.DataFrame(logs) if logs else pd.DataFrame()
-    
-    def __del__(self):
-        """Flush remaining logs on cleanup"""
-        self.flush()
 
 
 # Global prediction logger instance
