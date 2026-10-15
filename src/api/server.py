@@ -77,7 +77,6 @@ async def startup_event():
     logger.info(
         f"Starting Dynamic Pricing API",
         extra={
-            'environment': config.env,
             'version': '1.0.0'
         }
     )

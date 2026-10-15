@@ -10,9 +10,8 @@
      restart: unless-stopped
      ports:
        - "8000:8000"
-     environment:
-       - APP_ENV=production
-       - LOG_LEVEL=INFO
+    environment:
+      - LOG_LEVEL=INFO
        - LOG_FORMAT=json
        - RATE_LIMIT_ENABLED=true
        - MONITORING_ENABLED=true

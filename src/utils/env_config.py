@@ -14,36 +14,24 @@ class ConfigurationError(Exception):
 class EnvConfig:
     """Manages environment configuration with validation."""
     
-    def __init__(self, env: Optional[str] = None):
-        """Initialize configuration.
-        
-        Args:
-            env: Environment name (development, production). 
-                 If None, reads from APP_ENV or defaults to development.
+    def __init__(self):
+        """Initialize configuration from the single config file.
+
+        There is exactly one YAML config, ``configs/config.yaml`` (DECISIONS
+        D26): the former ``APP_ENV``-driven file selection was removed. Anything
+        that genuinely differs by environment is an env var, not a second file.
         """
         # Load .env file if exists
         load_dotenv()
-        
-        self.env = env or os.getenv("APP_ENV", "development")
+
         self.config: Dict[str, Any] = {}
         self._load_config()
         self._validate_config()
-    
+
     def _load_config(self):
-        """Load configuration from YAML file."""
-        config_map = {
-            "production": "configs/config.prod.yaml",
-            "development": "configs/config.dev.yaml",
-            "dev": "configs/config.dev.yaml",
-            "prod": "configs/config.prod.yaml"
-        }
-        
-        config_file = config_map.get(self.env, "configs/config.yaml")
-        
-        if not Path(config_file).exists():
-            # Fallback to default config
-            config_file = "configs/config.yaml"
-        
+        """Load configuration from the single config file."""
+        config_file = "configs/config.yaml"
+
         try:
             with open(config_file, 'r') as f:
                 self.config = yaml.safe_load(f)
@@ -128,14 +116,6 @@ class EnvConfig:
             return int(os.getenv(key, default))
         except (ValueError, TypeError):
             return default
-    
-    def is_production(self) -> bool:
-        """Check if running in production environment."""
-        return self.env in ('production', 'prod')
-    
-    def is_development(self) -> bool:
-        """Check if running in development environment."""
-        return self.env in ('development', 'dev')
 
 
 # Global config instance
@@ -147,11 +127,4 @@ def get_config() -> EnvConfig:
     global _config
     if _config is None:
         _config = EnvConfig()
-    return _config
-
-
-def reload_config(env: Optional[str] = None):
-    """Reload configuration with optional environment override."""
-    global _config
-    _config = EnvConfig(env)
     return _config

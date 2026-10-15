@@ -56,6 +56,19 @@ def test_config_directory_is_not_empty():
     assert _yaml_keys(), "no configs/*.yaml files found"
 
 
+def test_exactly_one_config_file():
+    """R35 / DECISIONS D26: there is a single YAML config, configs/config.yaml.
+
+    The former ``config.dev.yaml`` / ``config.prod.yaml`` duplicates and the
+    ``APP_ENV``-driven selection were removed, so the config directory must hold
+    exactly one file.
+    """
+    files = sorted(path.name for path in CONFIG_DIR.glob("*.yaml"))
+    assert files == ["config.yaml"], (
+        f"expected exactly configs/config.yaml, found {files}"
+    )
+
+
 def test_every_yaml_key_is_read_by_code():
     source = _code_source()
     unread = []

@@ -96,7 +96,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Configure (optional)
-cp configs/config.dev.yaml configs/config.yaml
+# Configuration lives in configs/config.yaml (single file; edit in place).
 ```
 
 ### Train the Model
