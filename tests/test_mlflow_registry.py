@@ -2,7 +2,9 @@
 
 These tests require mlflow and skip cleanly when it is unavailable
 (CONVENTIONS rule 17 — never let collection error). They use an isolated
-temporary file-store registry, so the repo's local registry is never mutated.
+temporary sqlite tracking store under ``tmp_path`` (mlflow 3.x refuses the
+filesystem backend unless ``MLFLOW_ALLOW_FILE_STORE`` is set, which we do not
+set), so neither the repo's local registry nor the cwd is ever mutated.
 
 Covered criteria:
 
@@ -41,18 +43,27 @@ def _engine_config():
 
 @pytest.fixture
 def temp_registry(tmp_path, monkeypatch):
-    """An isolated file-store registry holding one registered model version."""
+    """An isolated sqlite registry holding one registered model version."""
     if not MODEL_PATH.exists():
         pytest.skip(f"Committed model not found: {MODEL_PATH}")
     import mlflow
     import mlflow.xgboost
 
-    uri = (tmp_path / "mlruns").as_uri()
+    # A sqlite tracking store in tmp_path (not the file store, which mlflow 3.x
+    # rejects). ``tmp_path`` is absolute, so this renders as sqlite:////abs/path.
+    uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
     monkeypatch.setenv("MLFLOW_TRACKING_URI", uri)
     mlflow.set_tracking_uri(uri)
 
+    # Pin the experiment's artifact location under tmp_path so log_model does
+    # not write artifacts into the repo or the cwd.
+    artifact_location = (tmp_path / "artifacts").as_uri()
+    experiment_id = mlflow.create_experiment(
+        "registry-tests", artifact_location=artifact_location
+    )
+
     model = joblib.load(MODEL_PATH)
-    with mlflow.start_run():
+    with mlflow.start_run(experiment_id=experiment_id):
         mlflow.xgboost.log_model(model, "model", registered_model_name=MODEL_NAME)
     return uri
 
