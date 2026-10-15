@@ -9,9 +9,9 @@ production demo." It is derived from `.agents/STATE.md` (verified ground truth).
 **Guiding rule:** the headline capability must become true before anything is advertised.
 Do not present a claim as working until an item below that makes it true is `done`.
 
-**Priorities (re-set 2026-09-28; R34 added 2026-09-30):** P0 = R1, R2, R3, R6, R7, R8, R9, R10
-(8 items — the core must be true and the suite must run). P1 = R4, R5, R11–R26, R34 (19 items).
-P2 = R27–R33 (7 items). Total: 34 items.
+**Priorities (re-set 2026-09-28; R34 added 2026-09-30; R35 added 2026-10-13):** P0 = R1, R2, R3, R6, R7, R8, R9, R10
+(8 items — the core must be true and the suite must run). P1 = R4, R5, R11–R26, R34, R35 (20 items).
+P2 = R27–R33 (7 items). Total: 35 items.
 
 ---
 
@@ -388,6 +388,14 @@ P2 = R27–R33 (7 items). Total: 34 items.
 - **Depends on:** R12
 - **Note:** R12/D5 removed `product_id` from the model feature list, but `PricingRequest` still declares it as a required field (`src/api/schemas.py:9`) and the serving path silently drops it (the feature builder restricts to the committed columns). Harmless today — the tests pass and the response is unaffected — but a latent mismatch: a client sending `product_id` would reasonably expect it to change the price. Flagged here rather than fixed inline because it touches the UI/tests/README contract, not just the schema.
 
+### R35 — Collapse to a single `config.yaml`
+- **Priority:** P1
+- **Status:** todo
+- **Files touched:** `configs/config.dev.yaml` (delete), `configs/config.prod.yaml` (delete), `src/utils/env_config.py:32-51`, `.env.example`, `.env`, `docker-compose.prod.yml:14`, `tests/test_config.py`
+- **Acceptance criteria:** Exactly one file exists in `configs/` (`configs/config.yaml`), asserted by a test (e.g. `len(list(Path("configs").glob("*.yaml"))) == 1`). `EnvConfig._load_config` always loads `configs/config.yaml` — no `APP_ENV`→file `config_map` remains. `APP_ENV` is removed from `.env.example`, `.env`, and `docker-compose.prod.yml`, and `tests/test_env.py` is still green (its read-set equality no longer includes `APP_ENV`). After the change, `GET /v1/health` returns 200 and `POST /v1/optimize-price` (`grid_search`) returns 200 with a price within bounds (behavior provably unchanged, since the three files were key-identical). `tests/test_config.py` remains green.
+- **Depends on:** R18, R19
+- **Note:** Implements DECISIONS D26. The three files are currently key-identical (parsed YAML compares equal; only comments differ), so this is a pure deduplication with no behavior change. `APP_ENV` becomes readerless once the file selection is removed (`is_production`/`is_development` are already dead per STATE §3), so it must be dropped from the env read set in the same change or `tests/test_env.py` (CONVENTIONS rule 6) will flag it.
+
 ---
 
 ## P2 — Polish and resume hardening
@@ -449,7 +457,7 @@ P2 = R27–R33 (7 items). Total: 34 items.
 1. **Unblock the core:** R1, R2, R3 (independent — can run in parallel).
 2. **Lock in the fix:** R6, R7, R8, R9, R10.
 3. **Make the demo coherent:** R4, R5, R11, R12, R13, R14.
-4. **Make it honest and operable:** R15–R26, R34.
+4. **Make it honest and operable:** R15–R26, R34, R35.
 5. **Polish:** R27–R33.
 
 **Sequencing note:** R12 (step 3) retrains the model. **Re-run R7 after R12** — R7 derives
@@ -464,4 +472,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-10-08, against commit c58b6ab (R18, R19, R20 done this session; R15–R17 done earlier; R1–R13 before that; see `.agents/STATE.md`).
+Last updated: 2026-10-13, against commit ae6aacc (R35 added — collapse to a single `config.yaml`, DECISIONS D26; R18, R19, R20 done 2026-10-08; R15–R17 done earlier; R1–R13 before that; see `.agents/STATE.md`).

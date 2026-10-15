@@ -17,6 +17,22 @@ Next session should start with:
 
 ---
 
+## 2026-10-13 — Docs-only: record config decision D26 and add ROADMAP R35 (1 docs commit)
+
+Done:
+- **DECISIONS D26** ("Single config file; drop APP_ENV-driven YAML selection") added with status `accepted` (owner-approved 2026-10-13). Records why `configs/config{,.dev,.prod}.yaml` are a duplicate: after R18 the three files are key-identical (parsed YAML compares equal; only comments differ), and the `APP_ENV`→file selection in `EnvConfig._load_config` is unused by any YAML consumer (`EnvConfig` is instantiated only at `src/api/server.py:25`, which reads only env vars; the pricing engine is built from a hardcoded `configs/config.yaml` in `src/api/router.py:19-24`, as is every training/script entry point). Decision: keep one `config.yaml`, delete dev/prod, always load `config.yaml`, drop the readerless `APP_ENV`; env-specific values stay env vars. Rejected the "keep three files, add env-specific keys" option because the remaining keys are model/training/feature params that must not diverge per env (one model artifact + one feature contract). Consistent with DECISIONS D11 and CONVENTIONS rules 8/27. Header accepted-list and the file's `Last updated` line refreshed.
+- **ROADMAP R35** ("Collapse to a single `config.yaml`") added as a P1 item, status `todo`, depends on R18/R19 (both `done`). Scope: delete `configs/config.dev.yaml`/`config.prod.yaml`; `EnvConfig` always loads `configs/config.yaml`; remove `APP_ENV` from `.env.example`/`.env`/`docker-compose.prod.yml`; add a test asserting exactly one `configs/*.yaml`; keep `tests/test_env.py`/`tests/test_config.py` green; `/v1/health` and `/v1/optimize-price` still 200. Priority counts updated (P1 19→20, total 34→35) and the execution-order section now lists R35 in step 4. This supersedes the prior LOG entry's "Left open" note that the dev/prod duplication was "a candidate for R22/R23" — it is now tracked as R35, so R22/R23 no longer need to re-discover it.
+- Docs-only: no code touched, R35 not implemented. `tests/test_config.py` was left unchanged (it globs `configs/*.yaml`, so it keeps working with one file; R35 adds the exactly-one assertion).
+
+Left open / blocked:
+- `README.md:326-341` still shows a stale config example (R23 owns it).
+- R14, R21–R26, R34, and R35 remain `todo`.
+
+Next session should start with:
+- The next P1 item (e.g. R14 smoke tests, R21 `requirements.txt` correctness, R35 config collapse). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-08 — R18, R19, R20 done: config/env hygiene enforced by tests; real log rotation (3 code commits)
 
 Done:

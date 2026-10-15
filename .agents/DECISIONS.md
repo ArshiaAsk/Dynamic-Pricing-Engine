@@ -5,7 +5,7 @@ Ongoing log of decisions that shape this project. Each entry is one decision.
 
 **Reference commits:** Ground truth verified against commit `c32841f` (see `.agents/STATE.md`). This planning revision sits on top of the working tree at the current commit (see `git log -1`); no new commit was created for these `.agents/` edits.
 
-Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D5, D6, D13, and D15 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30; D13 on 2026-10-07 retroactively, implemented via R15, at the owner's direction); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
+Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D5, D6, D13, D15, and D26 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30; D13 on 2026-10-07 retroactively, implemented via R15, at the owner's direction; D26 on 2026-10-13); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
 
 ---
 
@@ -184,6 +184,13 @@ Context: Stored coverage is 69% overall, and the modules that matter most (the o
 Decision: Require ≥ 80% line coverage for `src/pricing/*` and `src/api/*` and enforce it in CI.
 Consequences: Requires ROADMAP R7/R9/R30; rules out adding pricing or API code without tests.
 
+## D26: Single config file; drop APP_ENV-driven YAML selection
+Date: 2026-10-13
+Status: accepted
+Context: After R18 deleted the unread `api:`/`logging:` blocks, `configs/config.dev.yaml` and `configs/config.prod.yaml` became key-identical to `configs/config.yaml` — the parsed YAML compares equal (only comments differ), so the `APP_ENV`→file selection in `EnvConfig._load_config` (`src/utils/env_config.py:32-51`) is a no-op. It is also unused by any YAML consumer: `EnvConfig` is instantiated only at `src/api/server.py:25`, which uses it solely for env-var reads (`get_bool`/`get_int`), while the config that actually drives pricing is built in `src/api/router.py:19-24` from a **hardcoded** `configs/config.yaml`; every training/script entry point (`src/training/train.py:7`, `scripts/train_with_tuning.py:24`, `scripts/regenerate_data.py:31`) also hardcodes it. That makes the dev/prod files a duplicate config that is never read (CONVENTIONS rule 27) and a second mechanism for one concern (rule 8).
+Decision: Keep exactly one YAML config file, `configs/config.yaml`. Delete `configs/config.dev.yaml` and `configs/config.prod.yaml`; make `EnvConfig` always load `configs/config.yaml` (drop the `APP_ENV`→file `config_map`); and remove the now-readerless `APP_ENV` from `.env`, `.env.example`, and `docker-compose.prod.yml`. Anything that genuinely differs by environment is expressed as an env var, never as a second YAML file.
+Consequences: Requires ROADMAP R35 (a test asserts exactly one `configs/*.yaml`; `tests/test_env.py` stays green after `APP_ENV` removal; `/v1/health` and `/v1/optimize-price` still return 200). Rules out committing per-environment YAML copies. The alternative ("keep dev/prod and add env-specific keys") was rejected because there are no genuinely env-specific YAML keys: the remaining keys are model/training/feature hyperparameters and artifact paths, and there is one trained artifact (`models/demand_model.pkl`) and one feature contract (`models/features.json`), so letting dev/prod diverge would desync the served model from its feature contract and silently break pricing. Consistent with D11 and CONVENTIONS rules 8/27.
+
 ---
 
-Last updated: 2026-10-08 (D13 accepted retroactively, implemented via R15; see `.agents/STATE.md`).
+Last updated: 2026-10-13 (D26 accepted — single config file, drop APP_ENV-driven YAML selection; see `.agents/STATE.md`).
