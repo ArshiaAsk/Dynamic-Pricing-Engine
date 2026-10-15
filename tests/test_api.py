@@ -163,6 +163,35 @@ def test_optimize_with_constraints(client):
     assert data["profit_margin"] >= 0.15 - 0.01  # Allow small numerical error
 
 
+def test_inventory_cap_binds_on_served_path(client):
+    """R22: the served path caps ``expected_demand`` at ``inventory_limit``.
+
+    The unconstrained served optimum is requested first; the limit is then set
+    below its demand so the cap is provably binding, and the capped request must
+    not exceed the limit. The engine forwards ``inventory_limit`` to
+    ``PriceOptimizer.optimize`` (``src/pricing/engine.py:185,193`` →
+    ``src/pricing/optimizer.py:48-49``).
+    """
+    unconstrained = client.post(
+        "/v1/optimize-price", json=_payload(optimization_method="grid_search")
+    )
+    assert unconstrained.status_code == 200
+    unconstrained_demand = unconstrained.json()["expected_demand"]
+
+    limit = max(1, int(unconstrained_demand * 0.5))
+    assert unconstrained_demand > limit, (
+        "test precondition: the cap must be binding "
+        f"(unconstrained demand {unconstrained_demand} <= limit {limit})"
+    )
+
+    capped = client.post(
+        "/v1/optimize-price",
+        json=_payload(optimization_method="grid_search", inventory_limit=limit),
+    )
+    assert capped.status_code == 200
+    assert capped.json()["expected_demand"] <= limit
+
+
 def test_grid_search_and_alias_accepted(client):
     """R6: the canonical method and its alias both return HTTP 200."""
     for method in ("grid_search", "grid"):
