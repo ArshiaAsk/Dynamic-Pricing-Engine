@@ -170,8 +170,8 @@ pytest tests/ --cov=src --cov-report=html
 # Run specific test file
 pytest tests/test_api.py -v
 
-# Run smoke tests
-pytest tests/smoke_tests.py -v
+# Run smoke tests (needs a running API; skips when unreachable)
+API_URL=http://localhost:8000 pytest tests/smoke_tests.py -v
 ```
 
 ---

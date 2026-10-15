@@ -35,8 +35,8 @@ echo ""
 echo "🚀 Running smoke tests..."
 echo ""
 
-# Run smoke tests
-python3 tests/smoke_tests.py
+# Run smoke tests (collectable pytest module, ROADMAP R14)
+pytest tests/smoke_tests.py -v
 
 EXIT_CODE=$?
 
