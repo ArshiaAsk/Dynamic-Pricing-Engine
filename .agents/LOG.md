@@ -20,7 +20,7 @@ Next session should start with:
 ## 2026-10-08 — Docs-only follow-up: mark DECISIONS D13 `accepted` (implemented via R15) (1 docs commit)
 
 Done:
-- **DECISIONS D13** ("Drop drift detection and performance-monitoring claims for the demo") status `proposed` → `accepted`, with the note **"Accepted 2026-09-29 retroactively, implemented via R15"** recorded in its Consequences (same style as D15's acceptance note). D13 was effectively decided and implemented by R15's delete branch this session; the header accepted-list and the file's `Last updated` line were refreshed accordingly.
+- **DECISIONS D13** ("Drop drift detection and performance-monitoring claims for the demo") status `proposed` → `accepted`, with the note **"Accepted 2026-10-07 retroactively, implemented via R15"** recorded in its Consequences (same style as D15's acceptance note). D13 was effectively decided and implemented by R15's delete branch this session; the header accepted-list and the file's `Last updated` line were refreshed accordingly. (The note was first recorded as "2026-09-29" at the owner's initial wording; corrected to the real R15 implementation date, 2026-10-07, after checking the system/git date.)
 - No other decision was touched. The prior entry's "Left open" note that D13 remained `proposed` is superseded by this entry.
 
 Left open / blocked:
