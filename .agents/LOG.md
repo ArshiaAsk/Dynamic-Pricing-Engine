@@ -17,6 +17,37 @@ Next session should start with:
 
 ---
 
+## 2026-10-08 — R18, R19, R20 done: config/env hygiene enforced by tests; real log rotation (3 code commits)
+
+Done:
+- **R18 implemented and verified. Code commit `97a4f8c`** ("chore(config): delete unread YAML keys + api/monitoring/logging blocks (R18)"), touching `configs/config{,.dev,.prod}.yaml` and `tests/test_config.py` (new).
+  - Deleted every key with no reader in `src/`/`scripts/`: the whole `api:` (10 keys) and `logging:` (4 keys) blocks in dev/prod (runtime toggles come from env vars; DECISIONS D11), the orphaned `monitoring:` block (its only consumer, `model_monitor.py`, was deleted in R15), `data.raw_path`/`processed_path`, `model.demand_model`, `pricing.{price_min,price_max}_multiplier`/`price_steps`/`default_method`, `training.cv_folds`/`run_hyperparameter_tuning`, and `features.raw_filename`/`feature_filename` (read only by the dead `feature_pipeline.py`, which uses `.get(..., default)` so nothing breaks).
+  - Kept the read set: `data.feature_path`; the nine `model.*` params; `pricing.{model_path,feature_columns_path,price_min,price_max}`; `training.{test_size,model_dir,report_dir,run_cv,tuning_trials}`; `features.{lag_days,rolling_windows,min_history_days}`.
+  - New `tests/test_config.py` (4 tests) enumerates every dotted leaf key across `configs/*.yaml` and fails on any leaf name not appearing as a string literal in `src/` or `scripts/`, with an explicit (currently empty) `ALLOWLIST`; it also asserts the `api`/`monitoring`/`logging` blocks are gone. **Pre-fix failure reproduced (rule 18):** against `HEAD` the test fails **2/4** (63 unread keys listed, incl. `config.dev.yaml:api.cors_enabled`, `…:monitoring.enabled`, `…:logging.rotation`, `config.yaml:pricing.default_method`; `config.dev.yaml still has an unread monitoring: block`). After → **4 passed**.
+  - **No behavior change:** `GET /v1/health` → 200 `{status:ok, loaded:true, source:local}`; `POST /v1/optimize-price` (`grid_search`, 70–110) → 200 `optimal_price=77.06`.
+- **R19 implemented and verified. Code commit `3bb3aef`** ("chore(env): add .env.example for the read set; drop decorative vars (R19)"), touching `.env.example` (new) and `tests/test_env.py` (new). `.env` is gitignored (`.gitignore:65`) and was cleaned in the working tree.
+  - Read set (14, scanned from `src/`): `APP_ENV`, `API_HOST`, `API_PORT`, `API_WORKERS`, `API_RELOAD`, `CORS_ENABLED`, `CORS_ORIGINS`, `RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS`, `REQUEST_TIMEOUT`, `LOG_LEVEL`, `LOG_FORMAT`, `LOG_DIR`, `MLFLOW_TRACKING_URI`. (`CORS_ENABLED` was read by `server.py:48` but missing from STATE §4.)
+  - Removed ~23 decorative vars (`APP_NAME`, `APP_VERSION`, `DEBUG`, `CORS_ALLOW_CREDENTIALS`, `RATE_LIMIT_WINDOW`, `DATABASE_URL`, `DATABASE_BACKUP_*`, `MODEL_PATH`, `FEATURES_PATH`, `MODEL_CACHE_ENABLED`, `MODEL_RELOAD_INTERVAL`, `LOG_RETENTION_DAYS`, `MONITORING_ENABLED`, `METRICS_ENABLED`, `HEALTH_CHECK_INTERVAL`, `PREDICTION_LOG_*`, `MODEL_INFERENCE_TIMEOUT`, `CACHE_TTL`, `ALERT_ERROR_THRESHOLD`, `MLFLOW_EXPERIMENT_NAME`, `STREAMLIT_*`). The shell-script vars all have `${VAR:-default}` fallbacks.
+  - New `tests/test_env.py` (2 tests) scans `src/` for `os.getenv`/`get_bool`/`get_int`/`get_env`/`os.environ`, asserts `.env.example` == read set and `.env` ⊆ read set (skips if `.env` is absent). **Pre-fix failure reproduced:** both fail (`.env.example is missing`; 13 unread `.env` vars listed). After → **2 passed**.
+- **R20 implemented and verified. Code commit `c58b6ab`** ("feat(logging): real log rotation configured from env (R20)"), touching `src/utils/logger.py`, `src/api/server.py`, `.env.example`, `tests/test_log_rotation.py` (new); `.env` updated in the working tree.
+  - **Decision: implement rotation** (the first R20 branch). Rationale: it is a small stdlib change; the README already advertises "log rotation" (`README.md:41`); and the roadmap's guiding rule is to make a claimed capability true before advertising it. So the README claim is **kept** (now true), not struck.
+  - `setup_logging(..., rotation="none", max_bytes=10 MiB, backup_count=5)` selects `RotatingFileHandler(maxBytes, backupCount)` (`LOG_ROTATION=size`), `TimedRotatingFileHandler(when="midnight")` (`daily`), or a plain `FileHandler` (`none`). New `setup_logging_from_env()` reads `LOG_LEVEL`/`LOG_FORMAT`/`LOG_DIR`/`LOG_ROTATION`/`LOG_MAX_BYTES`/`LOG_BACKUP_COUNT`; `server.py:31` calls it. `.env.example`/`.env` gained `LOG_ROTATION`/`LOG_MAX_BYTES`/`LOG_BACKUP_COUNT` (read set 14 → 17).
+  - `tests/test_log_rotation.py` (4 tests): writes past `LOG_MAX_BYTES` and asserts a rotated `app.log.1` appears (direct **and** via the env path), plus handler-class checks for `daily`/`none`. **Pre-fix failure reproduced (rule 18):** against `HEAD`'s logger the module **errors at collection** (`ImportError: cannot import name 'setup_logging_from_env'`) and a direct call raises `TypeError: setup_logging() got an unexpected keyword argument 'rotation'` (no `Rotating*` handler in the module). After → **4 passed**.
+- **Full suite (after all three):** `pytest tests/` → **78 passed, 2 skipped**, 0 collection errors (80 collected). Baseline before this session was 68 passed, 2 skipped (70 collected); +4 R18, +2 R19, +4 R20.
+- **Docs updated once, after all three:** ROADMAP **R18/R19/R20 → done** with evidence and `Last updated` → `c58b6ab`; STATE.md — §1 (log-rotation row FAKE-OR-DEAD → CONFIRMED; unit-tests row → 78 passed + the R18/R19/R20 tests), §4 rewritten from "defined but never read" to the enforced read set, `Last verified` → `c58b6ab`; CONVENTIONS rules 5 and 6 → `enforced`; this LOG entry.
+- **Commits:** three separate code commits, no amends, no combining — `97a4f8c` (R18), `3bb3aef` (R19), `c58b6ab` (R20), plus this docs commit. All on `main` as requested; no task branch.
+
+Left open / blocked:
+- `config.dev.yaml` and `config.prod.yaml` are now key-identical to `config.yaml` (their only prior differences were the deleted `api:`/`logging:` blocks). They are still loaded by `EnvConfig` when `APP_ENV` matches, so they are not orphaned, but the duplication is worth revisiting (CONVENTIONS rule 27) — a candidate for R22/R23.
+- `README.md:326-341` still shows a stale config example (`default_method: bayesian`, `run_hyperparameter_tuning: false`) whose keys R18 deleted from the YAML; R23 (README truth pass) owns fixing it.
+- R14, R21–R26, and R34 remain `todo`.
+- No model artifact was retrained this session, so R7's test-time references remain valid (no re-run needed).
+
+Next session should start with:
+- The next P1 item (e.g. R14 smoke tests, R21 `requirements.txt` correctness, R34 `product_id`). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-08 — Docs-only follow-up: mark DECISIONS D13 `accepted` (implemented via R15) (1 docs commit)
 
 Done:

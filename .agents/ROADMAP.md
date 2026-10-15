@@ -298,24 +298,45 @@ P2 = R27–R33 (7 items). Total: 34 items.
 
 ### R18 — Config: every YAML key is read, or removed
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `configs/config.yaml`, `configs/config.dev.yaml`, `configs/config.prod.yaml`, `src/api/server.py`, `src/pricing/engine.py`, `tests/test_config.py` (new)
+- **Status:** done
+- **Files touched:** `configs/config.yaml`, `configs/config.dev.yaml`, `configs/config.prod.yaml`, `tests/test_config.py` (new)
 - **Acceptance criteria:** A test enumerates every key in `configs/*.yaml` and fails if any key is not referenced in `src/` (with an explicit, documented allowlist). The `api:`, `monitoring:`, and `logging:` blocks are either consumed by code or deleted. STATE.md §4 must be empty of "defined but never read" entries.
 - **Depends on:** R3
+- **Evidence (2026-10-08, code commit `97a4f8c`):**
+  - **New test `tests/test_config.py`** enumerates every dotted leaf key across `configs/*.yaml` and asserts each leaf name appears as a string literal in `src/` or `scripts/` (the API + training entry points). Explicit `ALLOWLIST` (empty; every entry must carry a reason). `pytest tests/test_config.py` → **4 passed**.
+  - **Pre-fix failure reproduced (rule 18):** against the `HEAD` configs the test **fails 2/4** — 63 unread keys listed (`config.dev.yaml:api.cors_enabled`, `…:monitoring.enabled`, `…:logging.rotation`, `config.yaml:pricing.default_method`, `…:data.raw_path`, …) and `test_unread_runtime_blocks_are_deleted` fails on `config.dev.yaml still has an unread monitoring: block`. After the fix → **4 passed**.
+  - **Deleted (no reader in `src/`/`scripts/`):** the whole `api:` (10 keys) and `logging:` (4 keys) blocks in dev/prod (runtime toggles come from env vars via `EnvConfig`; DECISIONS D11); the orphaned `monitoring:` block (5 keys; its only consumer `model_monitor.py` was deleted in R15); `data.raw_path`/`data.processed_path`; `model.demand_model`; `pricing.price_min_multiplier`/`price_max_multiplier`/`price_steps`/`default_method`; `training.cv_folds`/`run_hyperparameter_tuning`; `features.raw_filename`/`feature_filename` (read only by the dead `feature_pipeline.py`, which `uses .get(..., default)` so nothing breaks; R22 will delete that module).
+  - **Kept (read):** `data.feature_path`; `model.{n_estimators,max_depth,learning_rate,subsample,colsample_bytree,min_child_weight,gamma,reg_alpha,reg_lambda}`; `pricing.{model_path,feature_columns_path,price_min,price_max}`; `training.{test_size,model_dir,report_dir,run_cv,tuning_trials}` (`tuning_trials` read by `scripts/train_with_tuning.py:87`); `features.{lag_days,rolling_windows,min_history_days}`.
+  - **No behavior change:** API still starts and serves — `GET /v1/health` → 200 `checks.model={'status':'ok','loaded':True,'source':'local'}`; `POST /v1/optimize-price` (`grid_search`, 70–110) → 200 `optimal_price=77.06`.
+  - **Suite:** `pytest tests/` → **72 passed, 2 skipped** (was 68+2; +4 R18 tests).
 
 ### R19 — Env: every `.env` var is read, or removed; add `.env.example`
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `.env`, `.env.example` (new), `tests/test_env.py` (new)
+- **Status:** done
+- **Files touched:** `.env` (gitignored; cleaned in the working tree), `.env.example` (new), `tests/test_env.py` (new)
 - **Acceptance criteria:** A test enumerates `.env` keys and fails on any unused var. Decorative vars from STATE.md §4 are removed. `.env.example` lists exactly the variables the code reads (and nothing else).
 - **Depends on:** R18
+- **Evidence (2026-10-08, code commit `3bb3aef`):**
+  - **Read set (derived by scanning `src/`, 14 vars):** `APP_ENV`, `API_HOST`, `API_PORT`, `API_WORKERS`, `API_RELOAD`, `CORS_ENABLED`, `CORS_ORIGINS`, `RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS`, `REQUEST_TIMEOUT`, `LOG_LEVEL`, `LOG_FORMAT`, `LOG_DIR`, `MLFLOW_TRACKING_URI`. (`CORS_ENABLED` was previously read but undocumented in STATE.md §4.)
+  - **New `.env.example`** lists exactly those 14 (committed; `.env` itself is gitignored — `.gitignore:65`). The local `.env` is rewritten in the working tree to the same 14.
+  - **Removed decorative vars** (~23): `APP_NAME`, `APP_VERSION`, `DEBUG`, `CORS_ALLOW_CREDENTIALS`, `RATE_LIMIT_WINDOW`, `DATABASE_URL`, `DATABASE_BACKUP_ENABLED`, `DATABASE_BACKUP_INTERVAL`, `DATABASE_BACKUP_RETENTION_DAYS`, `MODEL_PATH`, `FEATURES_PATH`, `MODEL_CACHE_ENABLED`, `MODEL_RELOAD_INTERVAL`, `LOG_ROTATION`, `LOG_RETENTION_DAYS`, `MONITORING_ENABLED`, `METRICS_ENABLED`, `HEALTH_CHECK_INTERVAL`, `PREDICTION_LOG_ENABLED`, `PREDICTION_LOG_DIR`, `PREDICTION_LOG_BATCH_SIZE`, `MODEL_INFERENCE_TIMEOUT`, `CACHE_TTL`, `ALERT_ERROR_THRESHOLD`, `MLFLOW_EXPERIMENT_NAME`, `STREAMLIT_SERVER_*`. Shell-script vars (`API_URL`, `CONCURRENT_REQUESTS`, `TOTAL_REQUESTS`, `BACKUP_DIR`) all have `${VAR:-default}` fallbacks and are not app runtime config.
+  - **New `tests/test_env.py`** derives the read set by scanning `src/` for `os.getenv` / `get_bool` / `get_int` / `get_env` / `os.environ` and asserts `.env.example` == read set and `.env` ⊆ read set (skips if `.env` absent). `pytest tests/test_env.py` → **2 passed**.
+  - **Pre-fix failure reproduced (rule 18):** with the original `.env` and no `.env.example`, both tests **fail** — `.env.example is missing` and `.env defines variables no src/ code reads: ['APP_NAME', 'APP_VERSION', 'CORS_ALLOW_CREDENTIALS', 'DATABASE_URL', 'DEBUG', 'LOG_RETENTION_DAYS', 'LOG_ROTATION', 'MLFLOW_EXPERIMENT_NAME', 'MODEL_PATH', 'MONITORING_ENABLED', 'PREDICTION_LOG_ENABLED', 'RATE_LIMIT_WINDOW', 'STREAMLIT_SERVER_PORT']`. After → **2 passed**.
+  - **Suite:** `pytest tests/` → **74 passed, 2 skipped** (was 72+2; +2 R19 tests).
 
 ### R20 — Log rotation: implement it or delete the claim
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `src/utils/logger.py:92-100`, `README.md`, `.env`
+- **Status:** done
+- **Files touched:** `src/utils/logger.py`, `src/api/server.py`, `tests/test_log_rotation.py` (new), `.env.example` (+ the gitignored `.env` in the working tree)
 - **Acceptance criteria:** Either `RotatingFileHandler`/`TimedRotatingFileHandler` is configured from env, with a test that writes past the size limit and asserts a rotated `.1` file appears; or the rotation claims and `LOG_ROTATION`/`LOG_RETENTION_DAYS` are removed from README and `.env`.
 - **Depends on:** R19
+- **Decision: implement rotation** (first branch). Rationale (effort/value): it is a small, well-understood stdlib change, the README already advertises "log rotation" (`README.md:41`), and the roadmap's guiding rule is to make a claimed capability true before advertising it. Deleting the claim would have been less work but leaves a useful operability feature missing. So the README claim is **kept** (now true) rather than struck.
+- **Evidence (2026-10-08, code commit `c58b6ab`):**
+  - **Implementation:** `setup_logging(..., rotation="none", max_bytes=10 MiB, backup_count=5)` selects `RotatingFileHandler(maxBytes, backupCount)` for `LOG_ROTATION=size`, `TimedRotatingFileHandler(when="midnight", backupCount)` for `daily`, else a plain `FileHandler`. New `setup_logging_from_env()` reads `LOG_LEVEL`/`LOG_FORMAT`/`LOG_DIR`/`LOG_ROTATION`/`LOG_MAX_BYTES`/`LOG_BACKUP_COUNT`; `src/api/server.py` calls it instead of reading the logging env vars inline.
+  - **Size-rotation test (the acceptance criterion):** `tests/test_log_rotation.py::test_size_rotation_produces_a_backup_file` configures `max_bytes=200`, writes 50 log records, and asserts `app.log` **and** `app.log.1` exist; `test_setup_logging_from_env_honours_size_rotation` does the same through the env path (`LOG_ROTATION=size`, `LOG_MAX_BYTES=200`). `test_daily_rotation_uses_timed_handler` and `test_none_uses_a_plain_file_handler` assert the handler class per mode. `pytest tests/test_log_rotation.py` → **4 passed**.
+  - **Pre-fix failure reproduced (rule 18):** against `HEAD`'s `logger.py`, `tests/test_log_rotation.py` **errors at collection** (`ImportError: cannot import name 'setup_logging_from_env'`), and a direct call shows `TypeError: setup_logging() got an unexpected keyword argument 'rotation'` with **no** `Rotating*` handler class in the module. After the fix → **4 passed**.
+  - **No behavior regression:** API still starts and serves — `GET /v1/health` → 200; `POST /v1/optimize-price` → 200 `optimal_price=77.06`.
+  - **Suite:** `pytest tests/` → **78 passed, 2 skipped** (was 74+2; +4 R20 tests). Warnings unchanged from baseline (the `datetime.utcnow()` deprecation in `JSONFormatter` is pre-existing and untouched).
 
 ### R21 — `requirements.txt` correctness
 - **Priority:** P1
@@ -443,4 +464,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-10-07, against commit 42c4d68 (R15, R16, R17 done this session; R1–R13 done earlier; R7 re-verified after the R12 retrain; see `.agents/STATE.md`).
+Last updated: 2026-10-08, against commit c58b6ab (R18, R19, R20 done this session; R15–R17 done earlier; R1–R13 before that; see `.agents/STATE.md`).

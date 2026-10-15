@@ -40,8 +40,8 @@ If you cannot check a rule, it is not a rule. New rules are appended at the end 
 4. If a function is defined but never called (e.g. `load_production_model`, `compare_methods`, `EnvConfig.get_env`), either call it from production code or delete it; an unused import of it is not "usage". — `target (after R22)`
 
 ### Config & env hygiene
-5. Every key in `configs/*.yaml` must be read by `src/` code, or be deleted. The config test must fail on any unread key. (R18) — `target (after R18)`
-6. Every variable in `.env` must be read by code that actually runs (or by a shell script that is actually invoked); `.env.example` must list exactly the read set. Remove decorative vars. (R19) — `target (after R19)`
+5. Every key in `configs/*.yaml` must be read by `src/` code, or be deleted. The config test must fail on any unread key. (R18) — `enforced (R18: tests/test_config.py enumerates every dotted leaf key in configs/*.yaml and fails on any whose name is not referenced in src/ or scripts/; explicit ALLOWLIST)`
+6. Every variable in `.env` must be read by code that actually runs (or by a shell script that is actually invoked); `.env.example` must list exactly the read set. Remove decorative vars. (R19) — `enforced (R19: tests/test_env.py derives the read set by scanning src/ for os.getenv/get_bool/get_int/get_env/os.environ, asserts .env.example == read set and .env ⊆ read set)`
 7. Never hardcode a value that also exists as config (`test_size`, `random_state`, `cv_folds`, `price_steps`, etc.). Read it from config, and if the key is removed, remove the hardcoded twin too. — `target (after R18, R19)`
 8. Pick one configuration mechanism per concern: runtime toggles come from env vars *or* YAML, never both with a third unread copy. If a section exists in both, delete one. — `target (after R18)`
 
@@ -89,4 +89,4 @@ If you cannot check a rule, it is not a rule. New rules are appended at the end 
 
 ---
 
-Last updated: 2026-10-07, against commit 42c4d68 (rules 11, 13, 15 → `enforced` after R15/R16/R17; see `.agents/STATE.md`).
+Last updated: 2026-10-08, against commit c58b6ab (rules 5 and 6 → `enforced` after R18/R19; rules 11, 13, 15 → `enforced` after R15/R16/R17; see `.agents/STATE.md`).

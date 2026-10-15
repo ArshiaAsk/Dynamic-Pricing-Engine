@@ -48,12 +48,12 @@ file called the pickle "committed", read "present in the working tree".
 | Input validation | CONFIRMED | `src/api/schemas.py:5-77` | Real Pydantic constraints + `price_max > price_min` validator (`:43-48`). `optimization_method` is a `Literal["grid_search","grid"]` (default `grid_search`), so `"bayesian"`/unknown values → HTTP 422 (R6). |
 | Error handling / graceful shutdown | CONFIRMED (fixed 2026-10-07, R16) | `src/api/middleware.py`, `src/api/error_handlers.py`, `src/api/server.py:77-92`, `src/api/router.py:91-113` | Handlers exist. R16 removed the last leak: the router's `except Exception` logs the real exception server-side and returns `JSONResponse(500, {"message": <generic>, "request_id": ...})` instead of `detail=str(e)`. `tests/test_api.py::test_optimizer_failure_returns_generic_error` forces a `KeyError` and asserts the body contains none of `KeyError`/`not in index`/`Traceback`. The earlier problem is also fixed: `engine.load_model` logs MLflow fallbacks at **ERROR** and records the degraded source (R5). |
 | Structured JSON logs | CONFIRMED | `src/utils/logger.py:11-44`, `:82-100` | Real JSON formatter + file handler. |
-| Log rotation | FAKE-OR-DEAD | `src/utils/logger.py:98` → plain `logging.FileHandler` | No `RotatingFileHandler`/`TimedRotatingFileHandler`. `LOG_ROTATION`/`LOG_RETENTION_DAYS` (`.env:41-42`) are never read. README's "rotation" is a manual `find ... -delete` snippet (`README.md:284`). |
+| Log rotation | CONFIRMED (fixed 2026-10-08, R20) | `src/utils/logger.py` `setup_logging` selects `RotatingFileHandler` (LOG_ROTATION=size, LOG_MAX_BYTES/LOG_BACKUP_COUNT) or `TimedRotatingFileHandler` (daily); `setup_logging_from_env` reads the env; `src/api/server.py:31` calls it | Real rotation, driven by env. `tests/test_log_rotation.py` writes past `LOG_MAX_BYTES` and asserts a rotated `app.log.1` appears. README's "log rotation" (`README.md:41`) is now true; the `find ... -delete` snippet (`README.md:284`) still rotates the prediction JSONL logs manually. |
 | Docker deployment | CONFIRMED (caveats) | `Dockerfile`, `Dockerfile.hf`, `Dockerfile.prod`, `docker-compose*.yml` | Real images; `Dockerfile.prod:36` runs non-root `appuser`. Caveats: `Dockerfile:1` base is the `docker.arvancloud.ir` mirror; `docker-compose.yml:36` references `image: dynamic-pricing:latest` with **no `build:` context** (needs a pre-built image). |
 | Nginx reverse proxy | FAKE-OR-DEAD | `docker-compose.prod.yml:53-54` mounts `./nginx/nginx.conf` and `./nginx/ssl` | `nginx/` **does not exist**. `docker-compose -f docker-compose.prod.yml up` fails on the missing bind mounts. No nginx config anywhere. |
 | Automated AWS EC2 deployment + rollback | NOT-FOUND | `README.md:200-218` | `scripts/deploy.sh` and `scripts/pre_deploy_check.sh` are **missing**. Only `health_check.sh`, `metrics.sh`, `logs.sh`, `load_test.sh`, `backup_database.sh`, `restore_database.sh`, `run_smoke_tests.sh` exist. |
 | CI/CD (test automation, image builds, smoke tests) | NOT-FOUND | no `.github/` directory, no workflow files | Dead CI metadata code remains at `scripts/train_with_tuning.py:28-35` (`GITHUB_RUN_ID`, etc.). |
-| Unit / integration / smoke tests | PARTIAL | `tests/` | As of R17 (2026-10-07) a plain `pytest tests/` **exits 0 with 0 collection errors: 68 passed, 2 skipped (70 collected)**, and the interpreter-exit `PredictionLogger.__del__` ImportError noise is gone (R17). R15 deleted `tests/test_data_drift.py`; R16 added the error-leak test `tests/test_api.py::test_optimizer_failure_returns_generic_error`; R17 added `tests/test_prediction_logger.py` (3 tests). `tests/conftest.py` provides a repo-root `sys.path` bootstrap and the shared lazy-import `client` fixture; `tests/test_api.py` no longer imports `src.api.server` at module level. `tests/test_optimizer_real.py` (R7) runs both optimizers against the working-tree `models/demand_model.pkl` (gitignored, regenerated) + the tracked `models/features.json` and **fails** when R1/R2 are reverted; R6 added `test_served_grid_optimizer_reaches_reference_optimum` (all five bounds, fails 2/5 pre-fix); R12 added `tests/test_training_data.py` (chronological split, no `product_id`/target leakage, R2+MAPE present) — R7 was re-run after the R12 retrain. R9 added the API-level contract + grid-path ratio tests to `tests/test_api.py`; R10/R11 added `tests/test_streamlit_contract.py` (UI-read keys ⊆ `PricingResponse.model_fields`; no fabricated response keys). Earlier: `tests/test_serving_features.py` (R4), `tests/test_mlflow_registry.py` (R5), `tests/test_health_model_type.py` (R13). Still open: `pytest tests/smoke_tests.py` collects **0** (class `SmokeTestRunner` holds methods, not module-level `test_*`) — R14; `tests/test_optimizer.py:18` mocks a *smooth* model; `tests/test_integration.py` exercises the **dead** `IntegratedPricingOptimizer`. Stored coverage: **69%** (`.coverage`, dated Jun 6). |
+| Unit / integration / smoke tests | PARTIAL | `tests/` | As of R20 (2026-10-08) a plain `pytest tests/` **exits 0 with 0 collection errors: 78 passed, 2 skipped (80 collected)**, and the interpreter-exit `PredictionLogger.__del__` ImportError noise is gone (R17). R18 added `tests/test_config.py` (4 tests: every `configs/*.yaml` key is read), R19 added `tests/test_env.py` (2 tests: `.env.example` == the env read set, `.env` has no unread var), R20 added `tests/test_log_rotation.py` (4 tests: size/daily/none rotation). R15 deleted `tests/test_data_drift.py`; R16 added the error-leak test `tests/test_api.py::test_optimizer_failure_returns_generic_error`; R17 added `tests/test_prediction_logger.py` (3 tests). `tests/conftest.py` provides a repo-root `sys.path` bootstrap and the shared lazy-import `client` fixture; `tests/test_api.py` no longer imports `src.api.server` at module level. `tests/test_optimizer_real.py` (R7) runs both optimizers against the working-tree `models/demand_model.pkl` (gitignored, regenerated) + the tracked `models/features.json` and **fails** when R1/R2 are reverted; R6 added `test_served_grid_optimizer_reaches_reference_optimum` (all five bounds, fails 2/5 pre-fix); R12 added `tests/test_training_data.py` (chronological split, no `product_id`/target leakage, R2+MAPE present) — R7 was re-run after the R12 retrain. R9 added the API-level contract + grid-path ratio tests to `tests/test_api.py`; R10/R11 added `tests/test_streamlit_contract.py` (UI-read keys ⊆ `PricingResponse.model_fields`; no fabricated response keys). Earlier: `tests/test_serving_features.py` (R4), `tests/test_mlflow_registry.py` (R5), `tests/test_health_model_type.py` (R13). Still open: `pytest tests/smoke_tests.py` collects **0** (class `SmokeTestRunner` holds methods, not module-level `test_*`) — R14; `tests/test_optimizer.py:18` mocks a *smooth* model; `tests/test_integration.py` exercises the **dead** `IntegratedPricingOptimizer`. Stored coverage: **69%** (`.coverage`, dated Jun 6). |
 | SQLite DB + backup/restore, 7-day retention | PARTIAL | `scripts/backup_database.sh`, `scripts/restore_database.sh`, `data.db` | `data.db` exists with a populated `sales_data` table (18,250 rows), but **no `src/` code reads or writes it** (no `DATABASE_URL` usage outside shell scripts). Backup/restore scripts are real; retention defaults to 7 days. |
 | MLflow model versioning | PARTIAL (loud fallback fixed R5; registry not promoted by default) | `src/utils/mlflow_tracking.py`, `scripts/train_with_tuning.py:136-140`, `src/pricing/engine.py`, `scripts/promote_model.py`, `mlruns/`, `mlflow.db` | `mlflow` is importable again (R5 venv fix). The engine resolves the `production` **alias** (fallback: `tags.stage='Production'`) and loads via `models:/<name>@production`; when neither exists it logs at **ERROR** and serves the local pickle, exposing `checks.model.source == "local"`. `scripts/promote_model.py` now uses `set_registered_model_alias`/`set_model_version_tag` (no deprecated calls) and defaults to the repo's local `mlruns/` file store. Registry has `demand_forecasting_model` v1 & v2 with no production alias by default, so the serve-time fallback is still taken unless `promote_model.py` is run. Verified by `tests/test_mlflow_registry.py` (isolated temp registry). README still lists MLflow under "Future Enhancements" (`README.md:419`) while the code depends on it (R23). |
 | Streamlit UI (Quick/Advanced/Batch) | CONFIRMED (fixed 2026-09-29, R10/R11) | `app.py` | Reads `expected_demand` — the API field (`src/api/schemas.py:89`) — so the Quick tab renders Optimal Price / Predicted Demand / Est. Revenue with no `KeyError` (verified with `streamlit.testing.v1.AppTest` against a live API). The method selectbox offers only `grid_search`/`grid` (the rejected legacy `"bayesian"` is gone). The Advanced tab renders the live `PricingResponse` schema from `/openapi.json`; the fabricated `example_response` (`confidence_interval`, `optimization_metadata`) is removed. `tests/test_streamlit_contract.py` asserts the UI-read keys ⊆ `PricingResponse.model_fields` and that no fabricated keys remain (CONVENTIONS rules 25/29). |
@@ -151,41 +151,65 @@ Note: the stored coverage report omits `revenue.py`, `optimize.py`, `data/*`, `t
 
 ---
 
-## 4. Config / env values defined but never read
+## 4. Config / env values — the enforced read set
 
-Cross-referenced `configs/*.yaml` and `.env` against actual reads in `src/`.
+As of 2026-10-08 (R18/R19/R20) **every key in `configs/*.yaml` and every `.env`
+variable is read by first-party code**; the unread ones were deleted. This is no
+longer a "defined but never read" list — two tests enforce it:
+`tests/test_config.py` (every dotted leaf key in `configs/*.yaml` is referenced
+in `src/` or `scripts/`) and `tests/test_env.py` (`.env.example` == the env vars
+`src/` reads; `.env` ⊆ that set).
 
-### `configs/config.yaml` (also in dev/prod) — defined, never read
+### `configs/*.yaml` — read set (all three files carry the same keys)
 
-| Key | Where defined | Reality |
-|---|---|---|
-| `data.raw_path`, `data.processed_path` | `config.yaml:2-3` | Unused; paths come from `src/utils/paths.py` (`ROOT_DIR`). |
-| `model.demand_model` | `config.yaml:7` | Unused. |
-| `pricing.price_min_multiplier`, `price_max_multiplier`, `price_steps` | `config.yaml:19-21` | Unused; grid `steps` defaults to 50 in `engine.py:152`. |
-| `pricing.default_method` | `config.yaml:28` | Unused; the schema default is `"grid_search"` (`schemas.py`). The YAML value was corrected from `bayesian` to `grid_search` in R6 (naming honesty). |
-| `training.test_size`, `random_state` | `config.yaml:31-32` | Unused; hardcoded `0.2` / `42` in `dataset.py:39-40`. |
-| `training.cv_folds` | `config.yaml:37` | Unused; hardcoded 5 (`pipeline.py:45`) and 3 (`train_with_tuning.py:86`). |
-| `training.run_hyperparameter_tuning` | `config.yaml:39` | Unused; `train_with_tuning.py` always tunes. |
-| entire `monitoring:` block (5 keys) | `config.yaml:49-54` | Unused by any `src/` code. R15 (2026-10-07) deleted the only module that could have consumed it (`model_monitor.py`); R18 still owns deleting/wiring the block. |
+| Key | Read by |
+|---|---|
+| `data.feature_path` | `src/training/pipeline.py:18` |
+| `model.n_estimators` / `max_depth` / `learning_rate` / `subsample` / `colsample_bytree` / `min_child_weight` / `gamma` / `reg_alpha` / `reg_lambda` | `src/training/trainer.py:19-31` (via `config["model"]`, `pipeline.py:48`) |
+| `pricing.model_path`, `pricing.feature_columns_path` | `src/pricing/engine.py:22-23`, `src/utils/env_config.py:62,67` |
+| `pricing.price_min`, `pricing.price_max` | `src/api/router.py:49-50` |
+| `training.test_size` | `src/training/pipeline.py:30`, `scripts/train_with_tuning.py:71` |
+| `training.model_dir`, `training.report_dir` | `src/training/pipeline.py:19-20`, `scripts/train_with_tuning.py:130-131` |
+| `training.run_cv` | `src/training/pipeline.py:52` |
+| `training.tuning_trials` | `scripts/train_with_tuning.py:87` |
+| `features.lag_days`, `features.rolling_windows`, `features.min_history_days` | `src/features/feature_builder.py:15-17` |
 
-Keys read by code but **absent** from config.yaml (rely on `.get` defaults): `pricing.registered_model_name` (`engine.py:29-31`), `pricing.reload_interval_sec` (`engine.py:32`).
+Deleted in R18 (no reader): the whole `api:` and `logging:` blocks in
+`config.dev.yaml`/`config.prod.yaml` (runtime toggles come from env vars;
+DECISIONS D11), the `monitoring:` block (its only consumer, `model_monitor.py`,
+was deleted in R15), `data.raw_path`/`data.processed_path`, `model.demand_model`,
+`pricing.price_min_multiplier`/`price_max_multiplier`/`price_steps`/`default_method`,
+`training.cv_folds`/`run_hyperparameter_tuning`, `features.raw_filename`/`feature_filename`.
 
-### `configs/config.dev.yaml` / `config.prod.yaml` — defined, never read
+Keys read by code but **absent** from the YAML (rely on `.get` defaults):
+`pricing.registered_model_name` (`engine.py:25-27`), `pricing.reload_interval_sec`
+(`engine.py:28`).
 
-| Block | Where | Reality |
-|---|---|---|
-| entire `api:` block (`host, port, workers, reload, timeout, cors_enabled, cors_origins, rate_limit_*`) | `config.dev.yaml:53-63`, `config.prod.yaml:53-63` | Never read. `src/api/server.py:48-71,108-111` reads these from **env vars** via `EnvConfig.get_bool/get_int` / `os.getenv`. |
-| entire `logging:` block (`level, format, rotation, retention_days`) | `config.dev.yaml:65-69`, `config.prod.yaml:65-69` | Never read. `server.py:28-30` reads `LOG_LEVEL`/`LOG_FORMAT`/`LOG_DIR` from env. |
+### `.env` variables — read set
 
-`EnvConfig._load_config` (`env_config.py:32-51`) loads dev/prod YAML only when `APP_ENV` matches, and validates only `model`/`pricing`/`features`; the `api:`/`logging:` sections are parsed but never consumed.
+**Read by `src/` (17):** `APP_ENV`, `API_HOST`, `API_PORT`, `API_WORKERS`,
+`API_RELOAD`, `CORS_ENABLED`, `CORS_ORIGINS`, `RATE_LIMIT_ENABLED`,
+`RATE_LIMIT_REQUESTS`, `REQUEST_TIMEOUT`, `LOG_LEVEL`, `LOG_FORMAT`, `LOG_DIR`,
+`LOG_ROTATION`, `LOG_MAX_BYTES`, `LOG_BACKUP_COUNT`, `MLFLOW_TRACKING_URI`.
+(`LOG_ROTATION`/`LOG_MAX_BYTES`/`LOG_BACKUP_COUNT` were added by R20; the other 14
+by R19. `LOG_DIR` is also read by the shell scripts.) `.env.example` lists exactly
+this set; `.env` is gitignored (`.gitignore:65`) and mirrors it.
 
-### `.env` variables
+Removed in R19 (decorative — no reader): `APP_NAME`, `APP_VERSION`, `DEBUG`,
+`CORS_ALLOW_CREDENTIALS`, `RATE_LIMIT_WINDOW`, `DATABASE_URL`,
+`DATABASE_BACKUP_ENABLED`, `DATABASE_BACKUP_INTERVAL`,
+`DATABASE_BACKUP_RETENTION_DAYS`, `MODEL_PATH`, `FEATURES_PATH`,
+`MODEL_CACHE_ENABLED`, `MODEL_RELOAD_INTERVAL`, `LOG_RETENTION_DAYS`,
+`MONITORING_ENABLED`, `METRICS_ENABLED`, `HEALTH_CHECK_INTERVAL`,
+`PREDICTION_LOG_ENABLED`, `PREDICTION_LOG_DIR`, `PREDICTION_LOG_BATCH_SIZE`,
+`MODEL_INFERENCE_TIMEOUT`, `CACHE_TTL`, `ALERT_ERROR_THRESHOLD`,
+`MLFLOW_EXPERIMENT_NAME`, `STREAMLIT_SERVER_*`.
 
-**Read by `src/`:** `APP_ENV`, `API_HOST`, `API_PORT`, `API_WORKERS`, `API_RELOAD`, `CORS_ORIGINS`, `RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS`, `LOG_LEVEL`, `LOG_FORMAT`, `LOG_DIR`, `REQUEST_TIMEOUT`, `MLFLOW_TRACKING_URI`. (`TUNING_TRIALS` is read by `train_with_tuning.py:81` but is **not** in `.env`.)
-
-**Defined but never read by any code** (decorative): `APP_NAME`, `APP_VERSION`, `DEBUG`, `CORS_ALLOW_CREDENTIALS`, `RATE_LIMIT_WINDOW`, `DATABASE_URL`, `DATABASE_BACKUP_ENABLED`, `DATABASE_BACKUP_INTERVAL`, `MODEL_PATH`, `FEATURES_PATH`, `MODEL_CACHE_ENABLED`, `MODEL_RELOAD_INTERVAL`, `LOG_ROTATION`, `LOG_RETENTION_DAYS`, `MONITORING_ENABLED`, `METRICS_ENABLED`, `HEALTH_CHECK_INTERVAL`, `PREDICTION_LOG_ENABLED`, `PREDICTION_LOG_DIR`, `PREDICTION_LOG_BATCH_SIZE`, `MODEL_INFERENCE_TIMEOUT`, `CACHE_TTL`, `ALERT_ERROR_THRESHOLD`, `MLFLOW_EXPERIMENT_NAME`.
-
-**Read only by shell scripts (not `src/`):** `DATABASE_URL`, `DATABASE_BACKUP_RETENTION_DAYS`, `BACKUP_DIR`, `API_URL`, `LOG_DIR`, `CONCURRENT_REQUESTS`, `TOTAL_REQUESTS`. **`STREAMLIT_*`** are consumed by Streamlit itself.
+**Out of scope for `.env`:** `TUNING_TRIALS` (read by `scripts/train_with_tuning.py:85`,
+not `src/`); `GITHUB_*` (CI-provided, `scripts/train_with_tuning.py:30-34`). The
+shell scripts read `DATABASE_URL`, `BACKUP_DIR`, `DATABASE_BACKUP_RETENTION_DAYS`,
+`API_URL`, `CONCURRENT_REQUESTS`, `TOTAL_REQUESTS`, but every one uses a
+`${VAR:-default}` fallback, so they are not required app runtime config.
 
 ---
 
@@ -230,4 +254,4 @@ conclusions, with these corrections:
 
 ---
 
-Last verified: 2026-10-07, against commit `42c4d68` (this session: R16 generic 500 + `request_id` `85f5944`, R15 drift module + test deleted and README claims struck `2746fa8`, R17 atexit flush replacing `__del__` `42c4d68`); earlier: R12 chronological split + `product_id` removed + retrain `47162d3`, R7 re-run after the retrain; D5/D6 accepted `b3ecf90`; R9 API contract + grid-path test `bc2f674`, R10 Streamlit response contract `bfa06eb`, R11 Advanced-tab fabricated response removed `b7abaff`, R6 canonical `grid_search` + HTTP 422 for legacy/unknown methods + adaptive grid resolution `b48d18a`, R4 shared serving feature builder `946eae9`, R5 loud/correct MLflow registry resolution + `promote_model.py` rewrite + mlflow venv fix `fdce6c4`, R13 health-check model-type fix `efe4d5e`, R8 pytest collection `8791772`, R7 real-model regression test `75151b3`, R1 optimizer fix `b21e45a`, R2 grid-search fix `ffc55fe`, R3 lazy mlflow import `0ba7d5a`. All other rows were last verified against `c32841f`.
+Last verified: 2026-10-08, against commit `c58b6ab` (this session: R18 config hygiene — every `configs/*.yaml` key is read, `api:`/`monitoring:`/`logging:` blocks deleted, `tests/test_config.py` `97a4f8c`; R19 env hygiene — `.env.example` for the read set, `tests/test_env.py` `3bb3aef`; R20 real env-configured log rotation, `tests/test_log_rotation.py` `c58b6ab`); earlier: R16 generic 500 + `request_id` `85f5944`, R15 drift module + test deleted and README claims struck `2746fa8`, R17 atexit flush replacing `__del__` `42c4d68`; earlier: R12 chronological split + `product_id` removed + retrain `47162d3`, R7 re-run after the retrain; D5/D6 accepted `b3ecf90`; R9 API contract + grid-path test `bc2f674`, R10 Streamlit response contract `bfa06eb`, R11 Advanced-tab fabricated response removed `b7abaff`, R6 canonical `grid_search` + HTTP 422 for legacy/unknown methods + adaptive grid resolution `b48d18a`, R4 shared serving feature builder `946eae9`, R5 loud/correct MLflow registry resolution + `promote_model.py` rewrite + mlflow venv fix `fdce6c4`, R13 health-check model-type fix `efe4d5e`, R8 pytest collection `8791772`, R7 real-model regression test `75151b3`, R1 optimizer fix `b21e45a`, R2 grid-search fix `ffc55fe`, R3 lazy mlflow import `0ba7d5a`. All other rows were last verified against `c32841f`.
