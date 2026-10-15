@@ -17,6 +17,21 @@ Next session should start with:
 
 ---
 
+## 2026-10-15 — R14 + R34 implemented and verified (smoke tests collectable + skip-when-offline; product_id is not a model feature)
+
+Done:
+- **C1 `47ea3d6` — `test(smoke): make smoke tests collectable pytest tests with a skip-when-offline fixture (R14)`.** Files: `tests/smoke_tests.py`, `scripts/run_smoke_tests.sh`, `README.md`. **Before:** `pytest tests/smoke_tests.py --collect-only -q` → **0 collected, exit 5**. Removed the `SmokeTestRunner` class + `__main__`; 8 module-level `test_*` checks now share a module-scoped `api_base_url` fixture that probes `/v1/health` once (2 s, no retry loop) and `pytest.skip`s on connection error; base URL from `API_URL` (default `http://localhost:8000`); the two `"bayesian"` payloads → `"grid_search"` (D2 rejects `"bayesian"` with 422). `scripts/run_smoke_tests.sh` → `pytest tests/smoke_tests.py -v` (`bash -n` exit 0); `README.md:174` → `API_URL=http://localhost:8000 pytest tests/smoke_tests.py -v`. **After:** collect-only → **8 collected**; `API_URL=http://127.0.0.1:59999 pytest tests/smoke_tests.py -q -rs` → **8 skipped, exit 0**; live API (`python -m src.api.server`, `API_HOST=127.0.0.1 API_PORT=8765 API_WORKERS=1 API_RELOAD=false MLFLOW_TRACKING_URI=sqlite:////tmp/smoke_mlflow.db`, `/v1/health` 200 after 3 s) → **8 passed in 0.47 s**; server killed, `ss -ltn | grep 8765` empty, no `mlflow.db`/`mlruns` created. **Default discovery:** `pytest.ini` `python_files = test_*.py` does not match `smoke_tests.py`, so a plain `pytest tests -q` does **not** collect it (0 matches); no `pytest.ini` change made. Suite → **103 passed, 2 skipped** (unchanged).
+- **C2 `ecb98ac` — `fix(api): state that product_id is not a model feature; add contract tests (R34)`.** Files: `src/api/schemas.py` (Field description only), `tests/test_product_id_contract.py` (new, 4 tests). **Before:** `PricingRequest.model_fields["product_id"].description` → `'Product ID'`; test (i) **FAILS** (`got 'Product ID'`), (ii)/(iii) pass. Description now: `"Product ID, accepted for request compatibility and logging only. It is NOT a model feature and does not influence the predicted demand or price."` (field stays `Field(..., ge=0)`). Served feature list checked as `PricingEngine.feature_columns` (`src/pricing/engine.py:31` declared, `:138` loaded, `:175` passed to `PriceOptimizer`). Behavioural invariance via the `client` TestClient fixture (product_id 1 vs 999 → identical price/demand/revenue) is a **characterization** test that passed before the fix too. **After:** 4 passed; suite → **107 passed, 2 skipped** (+4). UI check (read-only, not edited): `app.py:65-66` show the product-id input in the pricing form with no "ignored" help text.
+- **C3 (this commit) — docs.** `STATE.md` (unit-tests row → **107 passed, 2 skipped**; R14 note; §5.15 resolved; `Last verified` → `ecb98ac`), `ROADMAP.md` (**R14 → done**, **R34 → done** with before/after evidence; **R27** note that CI must start the API for the smoke tests to actually run; `Last updated`), `LOG.md` (this entry). Only these three files; explicit-path staging; one commit per code step; no amends, no branches.
+
+Left open / blocked:
+- Nothing blocked. **Task A (R22 dead-code brief) was delivered read-only** this session (ast import graph in `/tmp`); no commit.
+
+Next session should start with:
+- **R22** (dead code: delete or wire+test, file by file) using the read-only brief — first confirm the `proposed` DECISIONS the user must accept (notably D4 and D9), since a `proposed` decision must not be implemented.
+
+---
+
 ## 2026-10-15 — R25 closed (clean-clone build + health verified); seed sweep; convention 35; R14/R34 briefs
 
 Done:
