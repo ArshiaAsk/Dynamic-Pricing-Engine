@@ -66,3 +66,19 @@ def test_gitignore_does_not_ignore_dockerignore():
         f"{GITIGNORE} must not contain an entry exactly '.dockerignore'; got: {entries}"
     )
 
+
+def test_dockerignore_excludes_local_model_and_features():
+    """D30: ``.dockerignore`` excludes local model pickles and built features.
+
+    The main image builds its own model (``RUN python scripts/regenerate_data.py
+    && python -m src.training.train``), so the gitignored local artifacts must
+    never enter the build context.
+    """
+    entries = set(_entries(DOCKERIGNORE))
+    required = {"models/*.pkl", "data/features/"}
+    missing = required - entries
+    assert not missing, (
+        f"{DOCKERIGNORE} must contain the entries {sorted(required)}; "
+        f"missing {sorted(missing)}; got {sorted(entries)}"
+    )
+

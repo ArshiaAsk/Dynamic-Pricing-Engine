@@ -9,6 +9,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY . .
 
+RUN python scripts/regenerate_data.py && python -m src.training.train
+
 EXPOSE 8000
 
 CMD ["python", "-m", "src.api.server"]

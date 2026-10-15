@@ -39,6 +39,12 @@ logs/
 # Data (exclude from image, mount as volume)
 data/raw/*
 data/processed/*
+data/features/
+
+# Models (the image builds its own model; never copy local pickles)
+models/*.pkl
+
+# MLflow
 mlruns/
 mlflow.db
 
