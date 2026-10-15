@@ -69,27 +69,6 @@ class APIError(Exception):
         super().__init__(self.message)
 
 
-class ModelNotFoundError(APIError):
-    """Raised when model file is not found."""
-    
-    def __init__(self, message: str = "Model not found"):
-        super().__init__(message, status.HTTP_503_SERVICE_UNAVAILABLE, 'model_not_found')
-
-
-class OptimizationError(APIError):
-    """Raised when optimization fails."""
-    
-    def __init__(self, message: str = "Optimization failed"):
-        super().__init__(message, status.HTTP_500_INTERNAL_SERVER_ERROR, 'optimization_error')
-
-
-class InvalidInputError(APIError):
-    """Raised when input data is invalid."""
-    
-    def __init__(self, message: str = "Invalid input"):
-        super().__init__(message, status.HTTP_400_BAD_REQUEST, 'invalid_input')
-
-
 async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
     """Handle custom API errors."""
     request_id = getattr(request.state, 'request_id', 'unknown')
