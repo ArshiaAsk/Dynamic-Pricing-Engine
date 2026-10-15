@@ -2,7 +2,6 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-import random
 from src.utils.logger import get_logger
 from src.utils.paths import RAW_DATA_DIR
 
@@ -10,24 +9,31 @@ logger = get_logger(__name__)
 
 class EcommerceDataGenerator:
     """Generates synthetic e-commerce sales data with stronger price signals"""
-    def __init__(self, n_products=100, start_date="2023-01-01", days=365):
+    def __init__(self, n_products=100, start_date="2023-01-01", days=365, seed=42):
         self.n_products = n_products
         self.start_date = datetime.strptime(start_date, "%Y-%m-%d")
         self.days = days
+        # Seeded local Generator (DECISIONS D30): every random draw below uses
+        # this instance, never the global `np.random.*`, so identical inputs
+        # produce identical data. Created before `_generate_products`.
+        self.seed = seed
+        self.rng = np.random.default_rng(seed)
         self.products = self._generate_products()
 
     def _generate_products(self):
         data = []
         for i in range(self.n_products):
-            base_price = np.random.uniform(200_000, 5_000_000)
+            base_price = self.rng.uniform(200_000, 5_000_000)
             # Stronger elasticity for better price signal
-            elasticity = np.random.uniform(-2.5, -0.8)
-            cost = base_price * np.random.uniform(0.6, 0.85)
+            elasticity = self.rng.uniform(-2.5, -0.8)
+            cost = base_price * self.rng.uniform(0.6, 0.85)
             # Add base demand level
-            base_demand = np.random.uniform(30, 100)
+            base_demand = self.rng.uniform(30, 100)
             data.append({
                 "product_id": i,
-                "category": random.choice(["mobile", "laptop", "home", "fashion"]),
+                # stdlib `random.choice` replaced by the Generator's `choice`
+                # (closest equivalent) so the draw is seeded too.
+                "category": self.rng.choice(["mobile", "laptop", "home", "fashion"]),
                 "base_price": base_price,
                 "cost": cost,
                 "elasticity": elasticity,
@@ -42,25 +48,25 @@ class EcommerceDataGenerator:
     def generate_sales(self):
         records = []
         for _, product in self.products.iterrows():
-            inventory = np.random.randint(50, 300)
+            inventory = self.rng.integers(50, 300)
             for d in range(self.days):
                 date = self.start_date + timedelta(days=d)
                 seasonality = self._seasonality(d)
                 
                 # Competitor price with some variation
-                comp_price = product.base_price * np.random.uniform(0.92, 1.08)
+                comp_price = product.base_price * self.rng.uniform(0.92, 1.08)
                 
                 # Our price - sometimes competitive, sometimes not
-                price_strategy = np.random.choice(['competitive', 'premium', 'discount'], p=[0.5, 0.25, 0.25])
+                price_strategy = self.rng.choice(['competitive', 'premium', 'discount'], p=[0.5, 0.25, 0.25])
                 if price_strategy == 'competitive':
-                    our_price = comp_price * np.random.uniform(0.98, 1.02)
+                    our_price = comp_price * self.rng.uniform(0.98, 1.02)
                 elif price_strategy == 'premium':
-                    our_price = comp_price * np.random.uniform(1.05, 1.15)
+                    our_price = comp_price * self.rng.uniform(1.05, 1.15)
                 else:  # discount
-                    our_price = comp_price * np.random.uniform(0.85, 0.95)
+                    our_price = comp_price * self.rng.uniform(0.85, 0.95)
                 
                 # Marketing spend
-                marketing_spend = np.random.uniform(0, 5_000_000)
+                marketing_spend = self.rng.uniform(0, 5_000_000)
                 
                 # Demand calculation with stronger price effect
                 price_ratio = our_price / product.base_price
@@ -81,14 +87,14 @@ class EcommerceDataGenerator:
                 )
                 
                 # Add less noise for clearer signal
-                noise = np.random.normal(1, 0.08)  # Reduced from 0.1
+                noise = self.rng.normal(1, 0.08)  # Reduced from 0.1
                 units_sold = max(0, int(demand * noise))
                 units_sold = min(units_sold, inventory)
                 
                 # Restock
                 inventory -= units_sold
                 if inventory < 20:
-                    inventory += np.random.randint(100, 300)
+                    inventory += self.rng.integers(100, 300)
                 
                 records.append({
                     "date": date,

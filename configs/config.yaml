@@ -1,5 +1,6 @@
 data:
   feature_path: data/features/training_features.parquet
+  seed: 42
 
 model:
   n_estimators: 600
