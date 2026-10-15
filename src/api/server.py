@@ -17,18 +17,15 @@ from src.api.error_handlers import (
  )
 from fastapi.exceptions import RequestValidationError
 from src.utils.env_config import get_config
-from src.utils.logger import setup_logging
+from src.utils.logger import setup_logging_from_env
 import os
 import logging
  
  # Load configuration
 config = get_config()
  
- # Setup logging
-log_level = os.getenv("LOG_LEVEL", "INFO")
-log_format = os.getenv("LOG_FORMAT", "json")
-log_dir = os.getenv("LOG_DIR", "logs")
-setup_logging(level=log_level, log_format=log_format, log_dir=log_dir)
+ # Setup logging from environment (LOG_LEVEL/FORMAT/DIR + LOG_ROTATION etc.)
+setup_logging_from_env()
 
 logger = logging.getLogger(__name__)
 

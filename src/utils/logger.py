@@ -1,11 +1,17 @@
 """Structured logging configuration for production."""
 import logging
 import json
+import os
 import sys
 from datetime import datetime
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any, Dict, Optional
 import traceback
+
+# Default file-rotation threshold (10 MiB) and number of kept backups.
+DEFAULT_MAX_BYTES = 10 * 1024 * 1024
+DEFAULT_BACKUP_COUNT = 5
 
 
 class JSONFormatter(logging.Formatter):
@@ -58,48 +64,96 @@ def setup_logging(
     level: str = "INFO",
     log_format: str = "json",
     log_dir: Optional[str] = None,
-    log_file: Optional[str] = None
+    log_file: Optional[str] = None,
+    rotation: str = "none",
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    backup_count: int = DEFAULT_BACKUP_COUNT,
 ) -> logging.Logger:
     """Setup application logging.
-    
+
     Args:
         level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_format: Format type ('json' or 'text')
         log_dir: Directory for log files
         log_file: Log file name (default: app.log)
-        
+        rotation: File rotation mode — 'size' (RotatingFileHandler),
+            'daily' (TimedRotatingFileHandler at midnight), or 'none'.
+        max_bytes: Size threshold for 'size' rotation.
+        backup_count: Number of rotated files kept.
+
     Returns:
         Configured logger instance
     """
     # Get root logger
     logger = logging.getLogger()
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
-    
+
     # Remove existing handlers
     logger.handlers.clear()
-    
+
     # Choose formatter
     if log_format == "json":
         formatter = JSONFormatter()
     else:
         formatter = TextFormatter()
-    
+
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-    
+
     # File handler (if log_dir specified)
     if log_dir:
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
-        
+
         log_file = log_file or "app.log"
-        file_handler = logging.FileHandler(log_path / log_file)
+        log_target = log_path / log_file
+
+        # Rotation is configured from the environment (ROADMAP R20). The
+        # README claims log rotation, so this must be real, not a plain
+        # FileHandler.
+        mode = (rotation or "none").lower()
+        if mode in ("size", "bytes"):
+            file_handler: logging.Handler = RotatingFileHandler(
+                log_target, maxBytes=max_bytes, backupCount=backup_count
+            )
+        elif mode in ("daily", "midnight", "time"):
+            file_handler = TimedRotatingFileHandler(
+                log_target, when="midnight", backupCount=backup_count
+            )
+        else:
+            file_handler = logging.FileHandler(log_target)
+
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
-    
+
     return logger
+
+
+def _as_int(value: Optional[str], default: int) -> int:
+    """Parse an int from an env string, falling back to ``default``."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def setup_logging_from_env() -> logging.Logger:
+    """Configure logging from environment variables (ROADMAP R19/R20).
+
+    Reads ``LOG_LEVEL``, ``LOG_FORMAT``, ``LOG_DIR``, ``LOG_ROTATION``,
+    ``LOG_MAX_BYTES`` and ``LOG_BACKUP_COUNT`` and delegates to
+    :func:`setup_logging`.
+    """
+    return setup_logging(
+        level=os.getenv("LOG_LEVEL", "INFO"),
+        log_format=os.getenv("LOG_FORMAT", "json"),
+        log_dir=os.getenv("LOG_DIR", "logs"),
+        rotation=os.getenv("LOG_ROTATION", "none"),
+        max_bytes=_as_int(os.getenv("LOG_MAX_BYTES"), DEFAULT_MAX_BYTES),
+        backup_count=_as_int(os.getenv("LOG_BACKUP_COUNT"), DEFAULT_BACKUP_COUNT),
+    )
 
 
 def get_logger(name: str) -> logging.Logger:
