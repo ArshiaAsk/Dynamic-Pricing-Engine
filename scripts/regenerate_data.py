@@ -16,9 +16,20 @@ def main():
     logger.info("Regenerating Synthetic Data with Stronger Price Signals")
     logger.info("=" * 60)
     
+    with open("configs/config.yaml") as f:
+        config = yaml.safe_load(f)
+
+    # Dataset size and seed come from configs/config.yaml (DECISIONS D30) so the
+    # documented size (50 products x 365 days = 18,250 raw rows) is reproducible
+    # and the generator is deterministic.
+    data_conf = config.get("data", {})
+    n_products = data_conf.get("n_products", 50)
+    days = data_conf.get("days", 365)
+    seed = data_conf.get("seed", 42)
+
     # Generate new data
     logger.info("Step 1: Generating synthetic sales data...")
-    gen = EcommerceDataGenerator(n_products=100, days=365)
+    gen = EcommerceDataGenerator(n_products=n_products, days=days, seed=seed)
     df = gen.generate_sales()
     gen.save(df)
     
@@ -28,9 +39,6 @@ def main():
     
     # Build features
     logger.info("\nStep 2: Building features...")
-    with open("configs/config.yaml") as f:
-        config = yaml.safe_load(f)
-    
     builder = FeatureBuilder(config)
     raw_df = builder.load_raw()
     feature_df = builder.build_features(raw_df)

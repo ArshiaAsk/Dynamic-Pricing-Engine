@@ -1,5 +1,9 @@
 data:
   feature_path: data/features/training_features.parquet
+  # Dataset size and seed for scripts/regenerate_data.py (DECISIONS D30):
+  # 50 products x 365 days = 18,250 raw rows / 16,500 feature rows.
+  n_products: 50
+  days: 365
   seed: 42
 
 model:
