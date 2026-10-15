@@ -8,13 +8,13 @@ check to demonstrably fail on the pre-fix version, so
 ``test_invalid_fixture_is_reported`` asserts the validator flags it.
 """
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 INVALID_FIXTURE = FIXTURES_DIR / "invalid_compose_r35.yml.txt"
@@ -124,4 +124,23 @@ def test_docker_compose_config_accepts_file(compose_file):
     assert result.returncode == 0, (
         f"`docker compose config -q` failed for {compose_file.name} "
         f"(rc={result.returncode}): {result.stderr}"
+    )
+
+
+def test_compose_mlflow_service_pin_matches_requirements():
+    """D27 point 7: the mlflow service pins the same mlflow== as requirements.txt."""
+    compose = yaml.safe_load(
+        (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    )
+    command = compose["services"]["mlflow"]["command"]
+    compose_match = re.search(r"mlflow==([^\s\"'&]+)", command)
+    assert compose_match, f"mlflow service command does not pin mlflow==X: {command!r}"
+
+    req_text = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    req_match = re.search(r"^mlflow==([^\s#]+)", req_text, re.MULTILINE)
+    assert req_match, "requirements.txt has no mlflow== pin"
+
+    assert compose_match.group(1) == req_match.group(1), (
+        f"compose mlflow=={compose_match.group(1)} "
+        f"!= requirements mlflow=={req_match.group(1)}"
     )

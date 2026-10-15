@@ -20,7 +20,7 @@ services:
     volumes:
       - ./mlflow:/mlflow
     command: >
-      bash -c "pip install mlflow psycopg2-binary &&
+      bash -c "pip install mlflow==3.17.1 psycopg2-binary &&
       mlflow server
       --backend-store-uri postgresql://mlflow:mlflow@mlflow-db:5432/mlflow
       --default-artifact-root /mlflow/artifacts
