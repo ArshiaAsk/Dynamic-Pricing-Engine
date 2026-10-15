@@ -252,3 +252,39 @@ def test_grid_path_reaches_reference_optimum(client, served_model, served_featur
     data = response.json()
 
     assert data["expected_revenue"] >= REVENUE_RATIO * reference_max
+
+
+# --------------------------------------------------------------------------- #
+# R16 — internal error strings must not leak to clients
+# --------------------------------------------------------------------------- #
+
+# Substrings that would indicate raw internal error text reached the client.
+_LEAKY_STRINGS = ("KeyError", "not in index", "Traceback")
+
+
+def test_optimizer_failure_returns_generic_error(client, monkeypatch):
+    """R16: a forced optimizer failure -> HTTP 500 with only a generic body.
+
+    The response must carry a ``request_id`` and must not contain any raw
+    exception text (the pre-fix handler returned ``detail=str(e)``, exposing
+    e.g. the full missing-column list).
+    """
+    from src.api.router import engine
+
+    def _boom(*args, **kwargs):
+        raise KeyError("['price_advantage', 'log_comp_price'] not in index")
+
+    monkeypatch.setattr(engine, "get_optimal_price", _boom)
+
+    response = client.post(
+        "/v1/optimize-price", json=_payload(optimization_method="grid_search")
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body.get("request_id"), "response must include a request_id"
+    assert "message" in body
+
+    raw = response.text
+    for leaked in _LEAKY_STRINGS:
+        assert leaked not in raw, f"internal error text {leaked!r} leaked to client"

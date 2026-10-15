@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from src.api.schemas import PricingRequest, PricingResponse
 from src.pricing.engine import PricingEngine
 from src.monitoring.prediction_logger import get_prediction_logger
@@ -105,7 +106,17 @@ def optimize_price(payload: PricingRequest):
         health_checker.record_error()
         
         logger.error(f"Pricing optimization failed (request_id: {request_id}): {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+
+        # R16 / DECISIONS D21: never leak internal error text to the client. The
+        # exception is logged server-side above; the response carries only a
+        # generic message and the request id (rule 11).
+        return JSONResponse(
+            status_code=500,
+            content={
+                "message": "An internal error occurred while processing the request.",
+                "request_id": request_id,
+            },
+        )
 
 
 @router.get("/health")
