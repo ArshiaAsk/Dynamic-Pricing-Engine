@@ -12,15 +12,16 @@ valid across retrains such as ROADMAP R12.
 
 Covered acceptance criteria:
 
-* R1 — the derivative-free optimizer returns the revenue optimum (>= 0.99x a
-  >= 901-point reference grid computed here), reports success, stays in bounds,
-  does not hug a bound when the reference optimum is interior, keeps the result
-  contract, and honours the margin constraint; no gradient method remains.
-* R2 — the grid optimizer builds the complete 31-column feature frame (no
-  ``KeyError``) and also reaches the reference optimum.
+* R2 — the grid optimizer builds the complete feature frame (no ``KeyError``)
+  and reaches the reference optimum.
 * R6 — the served grid optimizer (adaptive default resolution, no caller-chosen
   step count) reaches the reference optimum on narrow and wide bounds alike, so
   making ``grid_search`` the sole served method does not regress revenue.
+
+The former R1 tests exercised the (now-deleted) Bayesian optimizer, which R22
+removed as unreachable from serving (DECISIONS D1/D2). The near-optimality
+property those tests asserted is now carried by the R2/R6 tests against the
+served ``PriceOptimizer``.
 """
 import json
 from pathlib import Path
@@ -30,8 +31,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.api.schemas import PricingResponse
-from src.pricing.bayesian_optimizer import BayesianPriceOptimizer
 from src.pricing.optimizer import PriceOptimizer
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -129,78 +128,6 @@ def _reference_curve(model, feature_columns, base_features, price_min, price_max
     )[feature_columns]
     demand = np.asarray(model.predict(frame), dtype=float).reshape(-1)
     return prices, demand, prices * demand
-
-
-# --------------------------------------------------------------------------- #
-# R1 — derivative-free optimizer reaches the true revenue optimum
-# --------------------------------------------------------------------------- #
-
-@pytest.mark.parametrize("price_min,price_max", R1_BOUNDS)
-def test_bayesian_reaches_reference_optimum(real_model, real_feature_columns,
-                                            price_min, price_max):
-    """R1: revenue >= 0.99x the test-time reference max; success; in bounds."""
-    _, _, reference_revenue = _reference_curve(
-        real_model, real_feature_columns, BASE_FEATURES, price_min, price_max
-    )
-    reference_max = float(np.max(reference_revenue))
-
-    optimizer = BayesianPriceOptimizer(real_model, real_feature_columns)
-    result = optimizer.optimize(BASE_FEATURES, price_min, price_max)
-
-    assert result["optimization_success"] is True
-    assert price_min <= result["optimal_price"] <= price_max
-    assert result["expected_revenue"] >= REVENUE_RATIO * reference_max
-
-
-@pytest.mark.parametrize("price_min,price_max", R1_BOUNDS)
-def test_bayesian_not_on_bound_when_reference_optimum_is_interior(
-        real_model, real_feature_columns, price_min, price_max):
-    """R1: when the reference argmax is strictly interior, the result is too."""
-    prices, _, reference_revenue = _reference_curve(
-        real_model, real_feature_columns, BASE_FEATURES, price_min, price_max
-    )
-    reference_argmax = float(prices[int(np.argmax(reference_revenue))])
-    step = (price_max - price_min) / (REFERENCE_POINTS - 1)
-    interior = (reference_argmax - price_min > step) and (price_max - reference_argmax > step)
-    if not interior:
-        pytest.skip("Reference optimum lies on a bound; bound-hugging rule does not apply")
-
-    optimizer = BayesianPriceOptimizer(real_model, real_feature_columns)
-    result = optimizer.optimize(BASE_FEATURES, price_min, price_max)
-
-    assert price_min < result["optimal_price"] < price_max
-
-
-def test_bayesian_result_contract(real_model, real_feature_columns):
-    """R1: result dict has the documented keys, is JSON-safe and schema-valid."""
-    optimizer = BayesianPriceOptimizer(real_model, real_feature_columns)
-    result = optimizer.optimize(BASE_FEATURES, *GRID_BOUNDS)
-
-    for key in ("optimal_price", "expected_demand", "expected_revenue",
-                "optimization_success", "optimization_iterations"):
-        assert key in result
-
-    json.dumps(result)  # must be JSON-serializable
-    PricingResponse(**result)  # must satisfy the API response contract
-
-
-def test_bayesian_constraints_respect_margin_and_bounds(real_model, real_feature_columns):
-    """R1: the margin-adjusted optimization keeps the margin and stays in bounds."""
-    cost, min_margin = 60.0, 0.15
-    optimizer = BayesianPriceOptimizer(real_model, real_feature_columns)
-    result = optimizer.optimize_with_constraints(
-        BASE_FEATURES, 30.0, 120.0, cost=cost, min_margin_pct=min_margin
-    )
-
-    assert result["profit_margin"] >= min_margin - 0.01
-    assert cost * (1 + min_margin) - 0.01 <= result["optimal_price"] <= 120.0
-
-
-def test_no_gradient_method_remains_on_tree_objective():
-    """R1: the scipy gradient solver must not operate on the tree objective."""
-    source = (REPO_ROOT / "src" / "pricing" / "bayesian_optimizer.py").read_text()
-    assert "L-BFGS-B" not in source
-    assert "minimize(" not in source
 
 
 # --------------------------------------------------------------------------- #
