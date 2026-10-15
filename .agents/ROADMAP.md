@@ -361,19 +361,18 @@ P2 = R27–R33 (7 items). Total: 35 items.
 
 ### R24 — nginx: add a real config or remove the service
 - **Priority:** P1
-- **Status:** blocked
-- **Blocked by:** DECISIONS **D17** ("Remove the nginx reverse proxy from the demo") is still `proposed`, so neither of R24's branches (add a real `nginx/nginx.conf`, or remove the service + README claim) is licensed yet. Session 2026-10-13 checked D17's status first and stopped on R24 as instructed; no code was changed. Owner must accept/override D17 to unblock.
+- **Status:** todo
 - **Files touched:** `docker-compose.prod.yml:45-61`, `nginx/nginx.conf` (new)
 - **Acceptance criteria:** `docker compose -f docker-compose.prod.yml config` succeeds; `up` starts nginx and `curl http://localhost:80/v1/health` returns 200 through the proxy. **OR** the nginx service block is removed and the README nginx claim is deleted.
 - **Depends on:** R3, R5
 
 ### R25 — Docker build/compose works from a clean checkout
 - **Priority:** P1
-- **Status:** blocked
-- **Blocked by:** DECISIONS **D16** ("Use a public base image for Docker builds", incl. the Python 3.10→3.12 bump) is still `proposed`, so R25's switch away from the `docker.arvancloud.ir` mirror is not licensed yet. Session 2026-10-13 checked D16's status first and skipped R25 as instructed; no code was changed. Owner must accept/override D16 to unblock.
-- **Files touched:** `Dockerfile:1`, `docker-compose.yml:35-48`
+- **Status:** todo
+- **Files touched:** `Dockerfile:1`, `docker-compose.yml:35-48`, `requirements.txt` (minimal `protobuf` pin — see Note)
 - **Acceptance criteria:** `docker compose build && docker compose up -d` succeeds using a standard public base image (no `docker.arvancloud.ir` or other private mirror), and `curl http://localhost:8000/v1/health` returns 200. `pricing-api` has a `build:` context. The base image Python version matches the interpreter used and tested (3.12 — see DECISIONS D16); the current Dockerfiles pin 3.10 and must be bumped.
 - **Depends on:** R3, R13
+- **Note:** A clean-checkout build also depends on the R5 `protobuf` pin landing in `requirements.txt`. R5 made `import mlflow` work by installing `protobuf==4.25.9` (plus `setuptools<81`) into the venv; `requirements.txt` carries neither, so a fresh image fails `pip check`/`import mlflow` exactly as it did pre-R5. R25 must pull that minimal `protobuf` pin into `requirements.txt` (or R21 — `requirements.txt` correctness — must land first). See DECISIONS D16 consequences.
 
 ### R26 — Bounded startup in `start.sh`
 - **Priority:** P1
@@ -486,4 +485,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-10-13, against commit 7cdbf56 (R35 config collapse `5a8f887` + R26 bounded `start.sh` wait loops `7cdbf56` done; R24/R25 `blocked` on still-`proposed` D17/D16; R35 was added earlier this day, DECISIONS D26; R18, R19, R20 done 2026-10-08; R15–R17 done earlier; R1–R13 before that; see `.agents/STATE.md`).
+Last updated: 2026-10-13, against commit 7cdbf56 (D16/D17 accepted → R24/R25 back to `todo`, R25 notes the `protobuf`-pin dependency; R35 config collapse `5a8f887` + R26 bounded `start.sh` wait loops `7cdbf56` done; R35 was added earlier this day, DECISIONS D26; R18, R19, R20 done 2026-10-08; R15–R17 done earlier; R1–R13 before that; see `.agents/STATE.md`).

@@ -5,7 +5,7 @@ Ongoing log of decisions that shape this project. Each entry is one decision.
 
 **Reference commits:** Ground truth verified against commit `c32841f` (see `.agents/STATE.md`). This planning revision sits on top of the working tree at the current commit (see `git log -1`); no new commit was created for these `.agents/` edits.
 
-Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D5, D6, D13, D15, and D26 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30; D13 on 2026-10-07 retroactively, implemented via R15, at the owner's direction; D26 on 2026-10-13); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
+Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D5, D6, D13, D15, D16, D17, and D26 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30; D13 on 2026-10-07 retroactively, implemented via R15, at the owner's direction; D16 and D17 on 2026-10-13; D26 on 2026-10-13); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
 
 ---
 
@@ -115,15 +115,15 @@ Decision: Un-ignore `.agents/` and commit these files as the project's living me
 Consequences: Requires editing `.gitignore:86` (ROADMAP R33); rules out relying on untracked local notes as the source of truth. **Accepted 2026-09-28 at the owner's direction** (the `.agents/` directory and `AGENTS.md` were committed).
 
 ## D16: Use a public base image for Docker builds
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-13)
+Status: accepted
 Context: `Dockerfile:1` uses the `docker.arvancloud.ir` mirror, which makes builds non-reproducible outside that registry.
 Decision: Switch all Dockerfiles to a standard public base image, and align the Python version with the interpreter actually used and tested — **`python:3.12-slim`** (STATE.md's verification environment is Python 3.12.3). The current Dockerfiles pin **3.10** (`Dockerfile:1`, `Dockerfile.hf:3`, `Dockerfile.prod:2,17`), which does not match the tested runtime; ROADMAP R25 must bump them to 3.12 so the image and the verified interpreter agree.
-Consequences: Requires ROADMAP R25; rules out builds that depend on a private/regional mirror, and rules out shipping an image whose Python minor version differs from the one the suite is verified on.
+Consequences: Requires ROADMAP R25; rules out builds that depend on a private/regional mirror, and rules out shipping an image whose Python minor version differs from the one the suite is verified on. **Clean-checkout build dependency (2026-10-13):** R25's acceptance is a build/`pip check` from a clean checkout, but `requirements.txt` does not currently carry the R5 fix that makes `import mlflow` work (R5 installed `protobuf==4.25.9` into the venv, alongside `setuptools<81`; the repo's `requirements.txt` pins neither). Without the `protobuf` pin a fresh image fails `pip check`/`import mlflow` exactly as it did pre-R5, so R25 must pull that minimal `protobuf` pin into `requirements.txt` (or R21 — `requirements.txt` correctness — must land first).
 
 ## D17: Remove the nginx reverse proxy from the demo
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-13)
+Status: accepted
 Context: `docker-compose.prod.yml` mounts `./nginx/nginx.conf` and `./nginx/ssl`, neither of which exists, so the prod stack cannot start.
 Decision: Remove the nginx service and its README claims for the demo rather than add a proxy/TLS stack that is out of scope.
 Consequences: Requires ROADMAP R24; rules out any "reverse proxy / TLS termination" claim unless a real config is added later.
@@ -193,4 +193,4 @@ Consequences: Requires ROADMAP R35 (a test asserts exactly one `configs/*.yaml`;
 
 ---
 
-Last updated: 2026-10-13 (D26 accepted — single config file, drop APP_ENV-driven YAML selection; see `.agents/STATE.md`).
+Last updated: 2026-10-13 (D16 and D17 accepted — public base image for Docker builds, and remove the nginx reverse proxy from the demo; D26 accepted earlier this day — single config file, drop APP_ENV-driven YAML selection; see `.agents/STATE.md`).

@@ -17,6 +17,24 @@ Next session should start with:
 
 ---
 
+## 2026-10-13 — Docs-only: accept D16/D17; R24/R25 back to `todo` (1 docs commit)
+
+Done:
+- **DECISIONS D16 and D17 → `accepted` (owner-approved 2026-10-13).** D16 ("Use a public base image for Docker builds", incl. the Python 3.10→3.12 bump) and D17 ("Remove the nginx reverse proxy from the demo") move from `proposed` to `accepted`; each date line records "(accepted 2026-10-13)". The header accepted-list and the file's `Last updated` line were refreshed.
+- **D16 consequences extended with the clean-checkout build dependency.** R25's acceptance is a build/`pip check` from a clean checkout, but `requirements.txt` does not carry the R5 fix (`protobuf==4.25.9`, alongside `setuptools<81`) that makes `import mlflow` work, so a fresh image fails `pip check`/`import mlflow` as it did pre-R5. Recorded that R25 must pull that minimal `protobuf` pin into `requirements.txt`, or R21 (`requirements.txt` correctness) must land first.
+- **ROADMAP R24 and R25: `blocked` → `todo`** (the blockers were the proposed decisions, now accepted); the "Blocked by" lines are removed. R25 gained a `Note` spelling out the `protobuf`-pin dependency (and `requirements.txt` was added to its Files touched). ROADMAP `Last updated` refreshed.
+- **STATE.md:** corrected the now-stale clause in the `Last verified` line (it said "R24/R25 blocked on proposed D17/D16"; now "D16/D17 accepted → ROADMAP R24/R25 back to `todo`"). No other STATE claim needed changing: it does not assert D16/D17 status, and its R24/R25-relevant rows (nginx FAKE-OR-DEAD, Docker caveats) stay accurate until R24/R25 are implemented.
+- **No code touched** — docs only (`.agents/DECISIONS.md`, `.agents/ROADMAP.md`, `.agents/STATE.md`, this LOG entry). All on `main`.
+
+Left open / blocked:
+- R24 and R25 are now actionable `todo` P1 items: R24 — add a real nginx config **or** remove the service + README claim; R25 — public base image + Python 3.12 bump **and** pull the R5 `protobuf` pin into `requirements.txt` (or do R21 first).
+- Nothing else changed by this docs commit.
+
+Next session should start with:
+- R24 and/or R25 now that D16/D17 are accepted (R25 depends on the `protobuf` pin in `requirements.txt` — add it as part of R25, or do R21 first), or the next unblocked P1 item (R21, R22, R14, R34). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-13 — R35 config collapse + R26 bounded `start.sh` loops done; R24/R25 blocked on proposed D17/D16 (2 code commits + this docs commit)
 
 Done:
