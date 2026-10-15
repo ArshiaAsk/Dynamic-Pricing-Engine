@@ -77,18 +77,6 @@ class EnvConfig:
         
         return value
     
-    def get_env(self, key: str, default: Any = None) -> Any:
-        """Get environment variable with fallback to default.
-        
-        Args:
-            key: Environment variable name
-            default: Default value if not found
-            
-        Returns:
-            Environment variable value or default
-        """
-        return os.getenv(key, default)
-    
     def get_bool(self, key: str, default: bool = False) -> bool:
         """Get boolean environment variable.
         

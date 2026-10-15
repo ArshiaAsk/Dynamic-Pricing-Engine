@@ -1,7 +1,6 @@
 """Production prediction logging system"""
 import atexit
 import json
-import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, List
@@ -32,47 +31,6 @@ class PredictionLogger:
         # `ImportError: sys.meta_path is None, Python is likely shutting down`.
         # atexit callbacks run before module teardown, so the flush is safe.
         atexit.register(self.flush)
-    
-    def log_prediction(
-        self,
-        request_id: str,
-        input_data: Dict,
-        prediction: Dict,
-        response_time_ms: float,
-        metadata: Optional[Dict] = None
-    ):
-        """
-        Log a single prediction
-        
-        Args:
-            request_id: Unique request identifier
-            input_data: Input features
-            prediction: Model prediction/optimization result
-            response_time_ms: Response time in milliseconds
-            metadata: Additional metadata (user_id, session_id, etc.)
-        """
-        log_entry = {
-            'timestamp': datetime.now().isoformat(),
-            'request_id': request_id,
-            'input': self._sanitize_input(input_data),
-            'prediction': prediction,
-            'response_time_ms': response_time_ms,
-            'metadata': metadata or {}
-        }
-        
-        self.buffer.append(log_entry)
-        self.stats['total_predictions'] += 1
-        
-        # Update rolling average response time
-        alpha = 0.1  # Exponential moving average factor
-        self.stats['avg_response_time_ms'] = (
-            alpha * response_time_ms + 
-            (1 - alpha) * self.stats['avg_response_time_ms']
-        )
-        
-        # Flush if buffer is full
-        if len(self.buffer) >= self.batch_size:
-            self.flush()
     
     def log_optimization(
         self,
@@ -165,46 +123,6 @@ class PredictionLogger:
                 sanitized[field] = '***REDACTED***'
         
         return sanitized
-    
-    def load_logs(
-        self,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        log_type: Optional[str] = None
-    ) -> pd.DataFrame:
-        """
-        Load logs for analysis
-        
-        Args:
-            start_date: Filter logs after this date
-            end_date: Filter logs before this date
-            log_type: Filter by type ('optimization', 'error', etc.)
-            
-        Returns:
-            DataFrame with logs
-        """
-        logs = []
-        
-        for log_file in sorted(self.log_dir.glob("predictions_*.jsonl")):
-            try:
-                with open(log_file, 'r') as f:
-                    for line in f:
-                        entry = json.loads(line)
-                        
-                        # Apply filters
-                        if start_date and datetime.fromisoformat(entry['timestamp']) < start_date:
-                            continue
-                        if end_date and datetime.fromisoformat(entry['timestamp']) > end_date:
-                            continue
-                        if log_type and entry.get('type') != log_type:
-                            continue
-                        
-                        logs.append(entry)
-                        
-            except Exception as e:
-                logger.warning(f"Failed to read {log_file}: {e}")
-        
-        return pd.DataFrame(logs) if logs else pd.DataFrame()
 
 
 # Global prediction logger instance
