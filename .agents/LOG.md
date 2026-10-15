@@ -17,6 +17,26 @@ Next session should start with:
 
 ---
 
+## 2026-10-13 — D27 dependency pin policy implemented (4 code commits + 2 docs commits; R21/R25 stay in-progress)
+
+Done:
+- **D27 accepted and implemented.** Commits: `d304e49` (docs: accept D27), `968c21c` (registry tests → sqlite), `5c62460` (promote default → sqlite), `af7383d` (requirements.txt fully pinned + `xgboost-cpu` + `mlflow==3.17.1`), `3a7e3e9` (compose mlflow pin), plus this docs commit. All on `main`, one commit per step, no amends.
+- **C0 `d304e49` — D27 recorded in `.agents/DECISIONS.md`** (Status: `accepted`, date 2026-10-13) with the 7-point pin policy; the header accepted-list and `Last updated` line were refreshed. Only that file.
+- **C1 `968c21c` — `tests/test_mlflow_registry.py` fixture `temp_registry` now uses a sqlite tracking store** (`sqlite:////<tmp_path>/mlflow.db`) with an explicit `artifact_location` under `tmp_path`, instead of the file store (mlflow 3.x refuses the filesystem backend unless `MLFLOW_ALLOW_FILE_STORE` is set — which we do not set anywhere). **Before:** 2 passed, 2 errors (`MlflowException: The filesystem tracking backend ...`). **After:** 4 passed; `git status --short` clean (no `mlflow.db`/`mlruns` created in the repo).
+- **C2 `5c62460` — `scripts/promote_model.py` default tracking URI → sqlite** (`sqlite:////<repo root>/mlflow.db`, the same DB `start.sh`'s `mlflow server --backend-store-uri sqlite:///mlflow.db` uses), docstring updated; `MLFLOW_TRACKING_URI` still overrides. New `tests/test_promote_default_uri.py` (2 tests): **before** fails (`file:///…/mlruns`), **after** passes. **Flag:** `mlflow.db` is tracked (not gitignored); `mlruns/` is gitignored (`.gitignore:80`). `.gitignore` not edited (out of scope).
+- **C3 `af7383d` — `requirements.txt` fully pinned** per D27 pts 1–3: every direct dependency `==`-pinned to the `.venv` versions (extras kept, e.g. `uvicorn[standard]`), `xgboost` → `xgboost-cpu==3.4.1` (avoids the Linux-only `nvidia-nccl-cu13` wheel), `mlflow==3.17.1`, `protobuf==4.25.9` (comment rewritten to "the version validated with the pinned stack"). New `tests/test_requirements_pinned.py` (3 tests): **before** 1 failed / 2 passed (21 unpinned lines); **after** 3 passed. Verified without touching `.venv`: `pip install --dry-run --ignore-installed -r requirements.txt --report` → exit 0, **115 packages**; the report asserts `mlflow==3.17.1`, `protobuf==4.25.9`, `xgboost-cpu==3.4.1`, plain `xgboost` absent, and no `nvidia-*` package.
+- **C4 `3a7e3e9` — `docker-compose.yml` mlflow service pins `mlflow==3.17.1`.** New test `tests/test_compose_files.py::test_compose_mlflow_service_pin_matches_requirements` (**before:** fails "does not pin mlflow==X"; **after:** passes) asserts the compose pin equals the `requirements.txt` pin. `tests/test_compose_files.py` → 9 passed. `psycopg2-binary`, the `python:3.10` image, and the obsolete `version` key left untouched (flagged only).
+- **Suite after all commits:** `pytest tests/` → **95 passed, 2 skipped, 0 errors** (was 87 passed / 2 skipped / 2 errors). The 2 `test_mlflow_registry.py` errors are fixed; the 2 skips are unchanged (`tests/test_optimizer_real.py:166` — reference optimum on a bound).
+
+Left open / blocked:
+- **R21 and R25 remain `in-progress`.** Remaining acceptance is network-bound: R21 — the owner's fresh-venv `pip install -r requirements.txt && pip check`; R25 — `docker compose build && docker compose up -d && curl http://localhost:8000/v1/health`. Neither was run here (no installs into `.venv`; no docker build/up).
+- Flagged, not fixed: `mlflow.db` is tracked in git; the mlflow compose service still uses `python:3.10` and the obsolete `version` key.
+
+Next session should start with:
+- Close R21/R25 on an unthrottled network (their code is done), or pick the next P1 item (R22, R23, R14, R34). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-10-13 — R24 done (nginx removed); R21 + R25 code done but left in-progress (PyPI throttled) (3 code commits + this docs commit)
 
 Done:
