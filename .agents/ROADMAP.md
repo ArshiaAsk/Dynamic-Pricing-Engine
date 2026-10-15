@@ -259,24 +259,42 @@ P2 = R27–R33 (7 items). Total: 34 items.
 
 ### R15 — Drift detection: wire it to real traffic or delete it (no third state)
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `src/monitoring/model_monitor.py`, `tests/test_data_drift.py`, `src/api/router.py`, `README.md`
+- **Status:** done
+- **Files touched:** `src/monitoring/model_monitor.py` (deleted), `tests/test_data_drift.py` (deleted), `README.md` (option (b) chosen; `src/api/router.py` **not** touched)
 - **Acceptance criteria:** Either (a) a real caller exists (endpoint `GET /v1/drift` or `scripts/check_drift.py`) with a test that feeds known-shifted data and asserts `drift_detected == True` and known-stable data asserts `False`; or (b) `model_monitor.py` and `tests/test_data_drift.py` are deleted and every README "drift detection" claim is removed. A README claim may not exist without a passing test.
 - **Depends on:** R8
+- **Decision: option (b) — delete.** Rationale (effort/value): a real caller would need a stable reference distribution (the training features parquet is gitignored and regenerated, so not reliably present), a real traffic-feature source, and a new endpoint/script plus shift-vs-stable tests — yet `ModelMonitor.calculate_drift` is only a normalized mean/std heuristic with **no** statistical test or p-value, so wiring it and calling it "drift detection" would still risk CONVENTIONS rule 24. For a synthetic-data demo with no actuals feedback loop there is no real value to wire; deletion is the honest, low-risk path and matches DECISIONS D13's default ("unless a real consumer is built instead").
+- **Evidence (2026-10-07, code commit `2746fa8`):**
+  - **Files deleted:** `src/monitoring/model_monitor.py` and `tests/test_data_drift.py` (the latter asserted `pvalue < 0.01`, i.e. that drift *exists* in random synthetic data — CONVENTIONS rule 15).
+  - **No dangling references:** `grep -rn "model_monitor\|ModelMonitor" --include=*.py .` → **no matches**.
+  - **README drift claims struck:** `grep -rni "drift" README.md` → **no matches** (pre-fix it matched the "Complete Monitoring" bullet, the "Model Monitoring" bullet, the config `monitoring:` example, and the `# Check data drift` troubleshooting line). The dead config example's `monitoring:` block was removed with it.
+  - **Suite:** `pytest tests/` → **65 passed, 2 skipped**, 0 collection errors (67 collected; −1 `test_data_drift`, +1 R16 test vs the pre-session 67).
+  - **Left to R18 (config hygiene, not R15):** `configs/config{,.dev,.prod}.yaml` still carry the unread `monitoring:` block (`drift_threshold` etc.); STATE.md §4 already flags it as never-read and R18 owns deleting or wiring it.
 
 ### R16 — Stop leaking internal error strings from the API
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `src/api/router.py:91-108`
+- **Status:** done
+- **Files touched:** `src/api/router.py:91-113`, `tests/test_api.py`
 - **Acceptance criteria:** A forced optimizer failure returns HTTP 500 whose body contains a generic message and `request_id` only. A test asserts the body contains none of `{"KeyError", "not in index", "Traceback"}`.
 - **Depends on:** R8
+- **Evidence (2026-10-07, code commit `85f5944`):**
+  - **Fix:** `router.py`'s `except Exception` block no longer does `raise HTTPException(status_code=500, detail=str(e))`. It logs the real exception server-side (`logger.error("Pricing optimization failed (request_id: ...): ...")`) and returns `JSONResponse(status_code=500, content={"message": "An internal error occurred while processing the request.", "request_id": request_id})` — a generic message plus `request_id` only (CONVENTIONS rule 11 / DECISIONS D21).
+  - **Pre-fix failure reproduced (rule 18):** with `router.py` restored from `HEAD`, `test_optimizer_failure_returns_generic_error` **FAILS** — the body is `{'detail': '"[\'price_advantage\', \'log_comp_price\'] not in index"'}` (raw `KeyError` text leaked). After the fix it **passes**.
+  - **Test:** new `tests/test_api.py::test_optimizer_failure_returns_generic_error` monkeypatches `engine.get_optimal_price` to raise `KeyError("['price_advantage', 'log_comp_price'] not in index")`, posts to `/v1/optimize-price`, and asserts HTTP **500**, a non-empty `request_id` and a `message`, and that the response text contains none of `KeyError` / `not in index` / `Traceback`.
+  - **Suite:** `pytest tests/test_api.py` → **10 passed** (was 9). Full `pytest tests/` → **66 passed, 2 skipped**, 0 collection errors (was 65+2).
 
 ### R17 — Fix the `PredictionLogger` shutdown crash
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `src/monitoring/prediction_logger.py:203-205`
+- **Status:** done
+- **Files touched:** `src/monitoring/prediction_logger.py:19-28` (atexit registration), `tests/test_prediction_logger.py` (new)
 - **Acceptance criteria:** Interpreter exit produces no `ImportError: sys.meta_path is None, Python is likely shutting down` traceback. A test flushes via `atexit` and asserts buffered entries were written to disk.
 - **Depends on:** none
+- **Evidence (2026-10-07, code commit `42c4d68`):**
+  - **Fix:** removed `PredictionLogger.__del__` (which called `flush()` — I/O — during teardown) and registered the flush with `atexit` in `__init__` (`atexit.register(self.flush)`). atexit callbacks run before module teardown / before `sys.meta_path` is cleared, so the final flush is safe (CONVENTIONS rule 13).
+  - **New tests `tests/test_prediction_logger.py` (3):** `test_no_io_in_del` asserts `"__del__" not in PredictionLogger.__dict__`; `test_atexit_flushes_buffered_entries` captures the atexit callback and asserts the buffered entry (below `batch_size`) is written to disk only after the callback runs; `test_interpreter_exit_has_no_shutdown_importerror` runs a real `python -c` subprocess, asserts exit 0, asserts stderr contains no `sys.meta_path is None`, and asserts the buffered entry was flushed at exit.
+  - **Pre-fix failure reproduced (rule 18):** with `prediction_logger.py` restored from `HEAD`, all three tests **FAIL** (`__del__` present; no atexit registration; nothing flushed at exit). After the fix: `pytest tests/test_prediction_logger.py -v` → **3 passed**.
+  - **Crash gone at interpreter exit:** the pre-session `pytest tests/` printed `Exception ignored in: <function PredictionLogger.__del__ ...> ImportError: sys.meta_path is None, Python is likely shutting down` after the summary; after the fix, a full `pytest tests/` run prints no such traceback.
+  - **Suite:** `pytest tests/` → **68 passed, 2 skipped**, 0 collection errors (was 65+2; +1 R16, −1 R15, +3 R17).
 
 ### R18 — Config: every YAML key is read, or removed
 - **Priority:** P1
@@ -425,4 +443,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-09-30, against commit 43d9a04 (R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13 done; R7 re-verified after the R12 retrain; R34 added; see `.agents/STATE.md`).
+Last updated: 2026-10-07, against commit 42c4d68 (R15, R16, R17 done this session; R1–R13 done earlier; R7 re-verified after the R12 retrain; see `.agents/STATE.md`).

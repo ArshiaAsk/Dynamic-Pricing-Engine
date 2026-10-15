@@ -17,6 +17,36 @@ Next session should start with:
 
 ---
 
+## 2026-10-07 — R16, R15, R17 done: no error-text leakage; drift detection deleted; atexit flush replaces `__del__` (3 code commits)
+
+Done:
+- **R16 implemented and verified. Code commit `85f5944`** ("fix(api): return generic 500 + request_id instead of leaking error text (R16)"), touching `src/api/router.py` and `tests/test_api.py`.
+  - `router.py`'s `except Exception` no longer does `raise HTTPException(500, detail=str(e))`. It logs the real exception server-side and returns `JSONResponse(status_code=500, content={"message": "An internal error occurred while processing the request.", "request_id": request_id})` — a generic message plus `request_id` only (CONVENTIONS rule 11 / DECISIONS D21). `HTTPException` is still imported for the health endpoints.
+  - **Pre-fix failure reproduced (rule 18):** with `router.py` restored from `HEAD`, the new test **FAILS** — the 500 body was `{'detail': '"[\'price_advantage\', \'log_comp_price\'] not in index"'}` (raw `KeyError` text leaked). After the fix it passes.
+  - **Test:** `tests/test_api.py::test_optimizer_failure_returns_generic_error` monkeypatches `engine.get_optimal_price` to raise `KeyError("['price_advantage', 'log_comp_price'] not in index")` and asserts HTTP **500**, a non-empty `request_id` + `message`, and that the response text contains none of `KeyError` / `not in index` / `Traceback`. `pytest tests/test_api.py` → **10 passed** (was 9).
+- **R15 implemented and verified. Code commit `2746fa8`** ("chore(monitoring): delete dead drift detection and strike README drift claims (R15)"), touching `src/monitoring/model_monitor.py` (deleted), `tests/test_data_drift.py` (deleted), `README.md`.
+  - **Decision: option (b) — delete.** Rationale (effort/value): a real caller would need a stable reference distribution (the training features parquet is gitignored/regenerated, not reliably present), a real traffic-feature source, and a new endpoint/script plus shift-vs-stable tests — yet `ModelMonitor.calculate_drift` was only a normalized mean/std heuristic with **no** statistical test/p-value, so wiring it and calling it "drift detection" would still risk rule 24. For a synthetic-data demo with no actuals feedback loop there is no value to wire; deletion is the honest, low-risk path and matches D13's default. `src/api/router.py` was therefore **not** touched.
+  - **Evidence:** `grep -rn "model_monitor\|ModelMonitor" --include=*.py .` → no matches; `grep -rni "drift" README.md` → no matches (pre-fix it matched the "Complete Monitoring" bullet, the "Model Monitoring" bullet, the config `monitoring:` example, and the `# Check data drift` troubleshooting line). The dead README config example's `monitoring:` block was removed too. `pytest tests/` → **65 passed, 2 skipped**.
+  - **Left to R18:** `configs/config{,.dev,.prod}.yaml` still carry the unread `monitoring:` block (`drift_threshold` etc.); STATE.md §4 already flags it as never-read and R18 owns deleting/wiring it.
+- **R17 implemented and verified. Code commit `42c4d68`** ("fix(monitoring): flush prediction logs via atexit instead of __del__ (R17)"), touching `src/monitoring/prediction_logger.py` and `tests/test_prediction_logger.py` (new).
+  - Removed `PredictionLogger.__del__` (which called `flush()` — I/O — during teardown) and added `atexit.register(self.flush)` in `__init__`. atexit callbacks run before module teardown / before `sys.meta_path` is cleared, so the final flush is safe (CONVENTIONS rule 13).
+  - **Pre-fix failure reproduced (rule 18):** with `prediction_logger.py` restored from `HEAD`, all three new tests **FAIL** (`__del__` present; no atexit registration; nothing flushed at exit). After the fix `pytest tests/test_prediction_logger.py -v` → **3 passed** (`test_no_io_in_del`, `test_atexit_flushes_buffered_entries`, `test_interpreter_exit_has_no_shutdown_importerror`).
+  - **Crash gone:** the pre-session `pytest tests/` printed `Exception ignored in: <function PredictionLogger.__del__ ...> ImportError: sys.meta_path is None, Python is likely shutting down` after the summary; after the fix a full `pytest tests/` run prints no such traceback.
+- **Full suite (after all three):** `pytest tests/` → **68 passed, 2 skipped**, 0 collection errors (70 collected). Baseline before this session was 65 passed, 2 skipped (67 collected); +1 R16, −1 R15 (`test_data_drift`), +3 R17.
+- **Docs updated once, after all three:** ROADMAP **R15/R16/R17 → done** with evidence and the `Last updated` line → `42c4d68`; STATE.md — §1 (drift + performance-monitoring rows → deleted; error-handling row → CONFIRMED; unit-tests row → 68 passed + R15/R16/R17 notes), §3 (removed the `ModelMonitor` dead-code row), §4 (monitoring-block note), §5.11/§5.13/§5.16 marked fixed, `Last verified` → `42c4d68`; CONVENTIONS rules 11/13/15 → `enforced`; this LOG entry.
+- **Commits:** three separate code commits, no amends, no combining — `85f5944` (R16), `2746fa8` (R15), `42c4d68` (R17), plus this docs commit. All on `main` as requested; no task branch.
+
+Left open / blocked:
+- `configs/config{,.dev,.prod}.yaml` still contain the now-doubly-dead `monitoring:` block (`drift_threshold`, etc.); R18 (config hygiene) owns deleting/wiring it.
+- DECISIONS **D13** ("drop drift detection claims") remains `proposed` — R15 implemented its delete branch at the owner's R15 instruction, but D13 itself was not formally marked `accepted` this session.
+- R14 (`tests/smoke_tests.py` collects 0), R18–R26, and R34 remain `todo`.
+- No model artifact was retrained this session, so R7's test-time references remain valid (no re-run needed).
+
+Next session should start with:
+- The next P1 item (e.g. R14 smoke tests, R18 config hygiene, R34 `product_id`). See `.agents/ROADMAP.md`.
+
+---
+
 ## 2026-09-30 — Docs-only: correct "committed model" phrasing; add R34 for the unused `product_id` field (1 docs commit)
 
 Done:
