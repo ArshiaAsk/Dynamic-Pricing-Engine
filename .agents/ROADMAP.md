@@ -361,24 +361,31 @@ P2 = R27–R33 (7 items). Total: 35 items.
 
 ### R24 — nginx: add a real config or remove the service
 - **Priority:** P1
-- **Status:** todo
+- **Status:** blocked
+- **Blocked by:** DECISIONS **D17** ("Remove the nginx reverse proxy from the demo") is still `proposed`, so neither of R24's branches (add a real `nginx/nginx.conf`, or remove the service + README claim) is licensed yet. Session 2026-10-13 checked D17's status first and stopped on R24 as instructed; no code was changed. Owner must accept/override D17 to unblock.
 - **Files touched:** `docker-compose.prod.yml:45-61`, `nginx/nginx.conf` (new)
 - **Acceptance criteria:** `docker compose -f docker-compose.prod.yml config` succeeds; `up` starts nginx and `curl http://localhost:80/v1/health` returns 200 through the proxy. **OR** the nginx service block is removed and the README nginx claim is deleted.
 - **Depends on:** R3, R5
 
 ### R25 — Docker build/compose works from a clean checkout
 - **Priority:** P1
-- **Status:** todo
+- **Status:** blocked
+- **Blocked by:** DECISIONS **D16** ("Use a public base image for Docker builds", incl. the Python 3.10→3.12 bump) is still `proposed`, so R25's switch away from the `docker.arvancloud.ir` mirror is not licensed yet. Session 2026-10-13 checked D16's status first and skipped R25 as instructed; no code was changed. Owner must accept/override D16 to unblock.
 - **Files touched:** `Dockerfile:1`, `docker-compose.yml:35-48`
 - **Acceptance criteria:** `docker compose build && docker compose up -d` succeeds using a standard public base image (no `docker.arvancloud.ir` or other private mirror), and `curl http://localhost:8000/v1/health` returns 200. `pricing-api` has a `build:` context. The base image Python version matches the interpreter used and tested (3.12 — see DECISIONS D16); the current Dockerfiles pin 3.10 and must be bumped.
 - **Depends on:** R3, R13
 
 ### R26 — Bounded startup in `start.sh`
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `start.sh:11-26`
+- **Status:** done
+- **Files touched:** `start.sh:11-26`, `tests/test_start_sh.py` (new)
 - **Acceptance criteria:** Both wait loops have a maximum attempt count/timeout and exit non-zero with a clear message when the dependency never becomes healthy. A test that points the script at a non-2xx health endpoint asserts it terminates within the timeout instead of hanging.
 - **Depends on:** none
+- **Evidence (2026-10-13, code commit `7cdbf56`):**
+  - **Implementation:** both loops now call `wait_for_health "<name>" "<url>"`, which retries at most `HEALTH_MAX_ATTEMPTS` (default 60) times with `HEALTH_RETRY_INTERVAL` (default 2s) between attempts and, on exhaustion, prints `ERROR: <name> did not become healthy at <url> after N attempts; giving up.` to stderr and `return 1`; each call is followed by `|| exit 1`, so the script exits non-zero (CONVENTIONS rule 31). Health URLs/attempts/interval are overridable env vars so the loops can be pointed at a non-2xx endpoint without real services.
+  - **Pre-fix failure reproduced (rule 18):** against `HEAD`'s `start.sh` with a stub `curl` that never returns 2xx, `timeout 5 bash start_old.sh` → **still looping after 5s, `exit=124`** (the unbounded bug). With the fixed script and the same stub: `HEALTH_MAX_ATTEMPTS=2 HEALTH_RETRY_INTERVAL=0 timeout 5 bash start.sh` → prints the clear error and **`exit=1`**.
+  - **Test:** new `tests/test_start_sh.py` (2 tests) runs the real `start.sh` with a stub PATH (no-op `mlflow`/`uvicorn`/`streamlit` + a `curl` that returns 2xx only for a marker substring): `test_mlflow_loop_gives_up_and_exits_nonzero` (non-2xx MLflow → non-zero, "MLflow did not become healthy") and `test_api_loop_gives_up_after_mlflow_becomes_healthy` (MLflow 2xx, API non-2xx → "MLflow is up." then non-zero, "uvicorn did not become healthy"). Both bound the subprocess at 30s, so a hang fails the test. `pytest tests/test_start_sh.py -v` → **2 passed**.
+  - **Suite:** `pytest tests/` → **81 passed, 2 skipped**, 0 collection errors (was 79+2 after R35; +2 R26 tests).
 
 ### R34 — `PricingRequest.product_id` is accepted but unused (latent contract mismatch)
 - **Priority:** P1
@@ -390,11 +397,18 @@ P2 = R27–R33 (7 items). Total: 35 items.
 
 ### R35 — Collapse to a single `config.yaml`
 - **Priority:** P1
-- **Status:** todo
-- **Files touched:** `configs/config.dev.yaml` (delete), `configs/config.prod.yaml` (delete), `src/utils/env_config.py:32-51`, `.env.example`, `.env`, `docker-compose.prod.yml:14`, `tests/test_config.py`
+- **Status:** done
+- **Files touched:** `configs/config.dev.yaml` (delete), `configs/config.prod.yaml` (delete), `src/utils/env_config.py:32-51`, `src/api/server.py:77-83`, `.env.example`, `.env`, `docker-compose.prod.yml:14`, `tests/test_config.py`, `README.md:99`
 - **Acceptance criteria:** Exactly one file exists in `configs/` (`configs/config.yaml`), asserted by a test (e.g. `len(list(Path("configs").glob("*.yaml"))) == 1`). `EnvConfig._load_config` always loads `configs/config.yaml` — no `APP_ENV`→file `config_map` remains. `APP_ENV` is removed from `.env.example`, `.env`, and `docker-compose.prod.yml`, and `tests/test_env.py` is still green (its read-set equality no longer includes `APP_ENV`). After the change, `GET /v1/health` returns 200 and `POST /v1/optimize-price` (`grid_search`) returns 200 with a price within bounds (behavior provably unchanged, since the three files were key-identical). `tests/test_config.py` remains green.
 - **Depends on:** R18, R19
 - **Note:** Implements DECISIONS D26. The three files are currently key-identical (parsed YAML compares equal; only comments differ), so this is a pure deduplication with no behavior change. `APP_ENV` becomes readerless once the file selection is removed (`is_production`/`is_development` are already dead per STATE §3), so it must be dropped from the env read set in the same change or `tests/test_env.py` (CONVENTIONS rule 6) will flag it.
+- **Evidence (2026-10-13, code commit `5a8f887`):**
+  - **One config file:** `configs/config.dev.yaml` and `configs/config.prod.yaml` deleted (`git rm`); `ls configs/` → `config.yaml` only. New `tests/test_config.py::test_exactly_one_config_file` asserts `sorted(Path("configs").glob("*.yaml")) == ["config.yaml"]`. **Pre-fix failure reproduced (rule 18):** with the two files restored from `HEAD` the test **fails** — `expected exactly configs/config.yaml, found ['config.dev.yaml', 'config.prod.yaml', 'config.yaml']`; after deletion it **passes**. `pytest tests/test_config.py` → **5 passed** (was 4).
+  - **`_load_config` always loads `configs/config.yaml`:** the `config_map` and the `APP_ENV` read are gone — `grep -n "config_map\|APP_ENV" src/` → no matches. The now-broken dead env concept (`self.env`, `is_production()`, `is_development()`, `reload_config()` — all unreachable per STATE §3) was removed with it, and `src/api/server.py`'s startup log no longer references `config.env`.
+  - **`APP_ENV` removed from the read set:** removed from `.env.example`, `.env` (gitignored, cleaned in the working tree), and `docker-compose.prod.yml`. `pytest tests/test_env.py` → **2 passed** (the derived read set no longer contains `APP_ENV`).
+  - **Behavior provably unchanged:** `GET /v1/health` → **HTTP 200** (`checks.model = {'status':'ok','loaded':True,'source':'local'}`); `POST /v1/optimize-price` (`grid_search`, 70–110) → **HTTP 200**, `optimal_price=77.06`, `expected_revenue=6152.544` — identical to the pre-change R12 value.
+  - **Suite:** `pytest tests/` → **79 passed, 2 skipped**, 0 collection errors (was 78+2; +1 R35 test).
+  - **README:** the `cp configs/config.dev.yaml configs/config.yaml` snippet (`README.md:99`) referenced a now-deleted file and was corrected to state the single-file config; the full README truth pass remains R23.
 
 ---
 
@@ -472,4 +486,4 @@ contains only claims that map to `CONFIRMED`/`PARTIAL` rows in `.agents/STATE.md
 
 ---
 
-Last updated: 2026-10-13, against commit ae6aacc (R35 added — collapse to a single `config.yaml`, DECISIONS D26; R18, R19, R20 done 2026-10-08; R15–R17 done earlier; R1–R13 before that; see `.agents/STATE.md`).
+Last updated: 2026-10-13, against commit 7cdbf56 (R35 config collapse `5a8f887` + R26 bounded `start.sh` wait loops `7cdbf56` done; R24/R25 `blocked` on still-`proposed` D17/D16; R35 was added earlier this day, DECISIONS D26; R18, R19, R20 done 2026-10-08; R15–R17 done earlier; R1–R13 before that; see `.agents/STATE.md`).

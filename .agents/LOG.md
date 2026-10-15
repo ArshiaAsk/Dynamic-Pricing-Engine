@@ -17,6 +17,33 @@ Next session should start with:
 
 ---
 
+## 2026-10-13 — R35 config collapse + R26 bounded `start.sh` loops done; R24/R25 blocked on proposed D17/D16 (2 code commits + this docs commit)
+
+Done:
+- **R35 implemented and verified. Code commit `5a8f887`** ("feat(config): collapse to a single config.yaml; drop APP_ENV selection (R35)"), implementing DECISIONS D26.
+  - Deleted `configs/config.dev.yaml` + `configs/config.prod.yaml` (key-identical duplicates); `configs/` now holds only `config.yaml`. `EnvConfig._load_config` always loads `configs/config.yaml` — the `APP_ENV`→file `config_map` is gone. Removed the now-broken dead env concept (`self.env`, `is_production`, `is_development`, `reload_config`, all unreachable per STATE §3) and the `config.env` reference in `src/api/server.py`'s startup log. Removed `APP_ENV` from `.env.example`, `.env` (gitignored; cleaned in the working tree), and `docker-compose.prod.yml`. Fixed the `README.md:99` snippet that copied the now-deleted `config.dev.yaml`.
+  - New `tests/test_config.py::test_exactly_one_config_file` asserts `sorted(configs/*.yaml) == ["config.yaml"]`. **Pre-fix failure reproduced (rule 18):** with the two files restored from `HEAD` it fails (`expected exactly configs/config.yaml, found ['config.dev.yaml', 'config.prod.yaml', 'config.yaml']`); passes after deletion. `pytest tests/test_config.py` → **5 passed** (was 4); `tests/test_env.py` → **2 passed** (derived read set no longer contains `APP_ENV`).
+  - **Behavior provably unchanged:** `GET /v1/health` → **200** (`checks.model = {status:ok, loaded:true, source:local}`); `POST /v1/optimize-price` (`grid_search`, 70–110) → **200**, `optimal_price=77.06`, `expected_revenue=6152.544` — identical to the pre-change R12 value (the three files were key-identical). Suite → **79 passed, 2 skipped** (was 78+2).
+- **R26 implemented and verified. Code commit `7cdbf56`** ("fix(ops): bound the start.sh health-wait loops and exit non-zero (R26)").
+  - Both loops now call `wait_for_health "<name>" "<url>"`: at most `HEALTH_MAX_ATTEMPTS` (default 60) attempts with `HEALTH_RETRY_INTERVAL` (default 2s) between them, then a clear stderr message and `return 1`, followed by `|| exit 1` (CONVENTIONS rule 31). Health URLs/attempts/interval are env-overridable so the loops can be pointed at a non-2xx endpoint without real services.
+  - **Pre-fix failure reproduced (rule 18):** against `HEAD`'s `start.sh` with a stub `curl` that never returns 2xx, `timeout 5 bash start_old.sh` → **still looping after 5s, `exit=124`** (the unbounded bug); the fixed script with the same stub → clear error + **`exit=1`**.
+  - New `tests/test_start_sh.py` (2 tests) runs the real script against a stub PATH (no-op `mlflow`/`uvicorn`/`streamlit` + a marker-driven `curl`), covering both loops; each bounds the subprocess at 30s so a hang fails the test. `pytest tests/test_start_sh.py -v` → **2 passed**. Suite → **81 passed, 2 skipped** (was 79+2).
+- **R24 NOT done — stopped on purpose.** Checked DECISIONS **D17** ("Remove the nginx reverse proxy") first: it is still **`proposed`**, so neither R24 branch (add a real `nginx/nginx.conf`, or remove the service + README claim) is licensed. Per instruction, stopped on R24 only and reported; no code changed. ROADMAP R24 → `blocked`.
+- **R25 NOT done — skipped on purpose.** Checked DECISIONS **D16** ("Use a public base image for Docker builds", incl. the Python 3.10→3.12 bump): still **`proposed`**, so the switch away from the `docker.arvancloud.ir` mirror is not licensed. Per instruction, skipped R25 and reported; no code changed. ROADMAP R25 → `blocked`. (Docker *is* available here — Docker 29.2.0 / Compose v5.0.2 — but that is moot: the gate is the proposed decision, not tooling.)
+- **Docs updated once, at the end:** ROADMAP R35/R26 → `done` with evidence, R24/R25 → `blocked`, `Last updated` → `7cdbf56`; STATE.md — §1 unit-tests row → 81 passed + R35/R26 test notes, §1 HF-Spaces row + §5.9 → bounded loops fixed (R26), §4 rewritten for the single `config.yaml` and the 16-variable env read set (`APP_ENV` removed), `Last verified` → `7cdbf56`; this LOG entry.
+- **Commits:** one code commit per task, no amends, no combining — `5a8f887` (R35), `7cdbf56` (R26), plus this docs commit. All on `main`; no task branch.
+
+Left open / blocked:
+- **R24** blocked on D17; **R25** blocked on D16. Both decisions remain `proposed` and must be accepted/overridden by the owner before either item can be implemented.
+- `docker-compose.prod.yml` still carries `MONITORING_ENABLED=true` (unread since R19) and still mounts the missing `./nginx/...` (R24); it cannot `up` until R24 is unblocked.
+- No model artifact was retrained this session, so R7's test-time references remain valid (no re-run needed).
+- Remaining `todo` P1: R14, R21, R22, R23, R34 (and R24/R25 once unblocked).
+
+Next session should start with:
+- The next unblocked P1 item (e.g. R21 `requirements.txt` correctness, R22 dead-code disposition, R14 smoke tests, R34 `product_id`). See `.agents/ROADMAP.md`. Or have the owner accept/override D16/D17 to unblock R25/R24.
+
+---
+
 ## 2026-10-13 — Docs-only: record config decision D26 and add ROADMAP R35 (1 docs commit)
 
 Done:
