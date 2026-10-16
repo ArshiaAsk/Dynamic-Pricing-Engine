@@ -26,9 +26,6 @@ python-dotenv==1.2.4
 joblib==1.6.0
 requests==2.34.2
 
-# Data ingestion — src/data/ingest.py imports SQLAlchemy directly
-sqlalchemy==2.1.4
-
 # MLflow for model tracking. `protobuf` is pinned to the version validated with
 # this pinned stack in the project venv (D27); transitive deps stay unpinned.
 mlflow==3.17.1
