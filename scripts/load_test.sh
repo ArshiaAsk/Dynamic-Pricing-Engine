@@ -43,7 +43,7 @@ PAYLOAD=$(cat << 'EOF'
    "price_max": 110.0,
   "cost": 60.0,
   "min_margin_pct": 0.15,
-  "optimization_method": "bayesian"
+  "optimization_method": "grid_search"
 }
 EOF
 )
