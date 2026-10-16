@@ -124,6 +124,9 @@ python scripts/train_with_tuning.py
 # Development mode (with auto-reload)
 uvicorn src.api.server:app --reload --host 0.0.0.0 --port 8000
 
+# Module form (no reload; used by scripts/verify_readme.sh)
+python -m src.api.server
+
 # Access API documentation
 # - Swagger UI: http://localhost:8000/docs
 # - ReDoc: http://localhost:8000/redoc
@@ -172,6 +175,9 @@ feature and does not affect the returned price.
 # Run all tests
 pytest tests/ -v
 
+# Run the suite quietly (what scripts/verify_readme.sh runs)
+pytest tests -q
+
 # Run with coverage report
 pytest tests/ --cov=src --cov-report=html
 
@@ -180,6 +186,9 @@ pytest tests/test_api.py -v
 
 # Run smoke tests (needs a running API; skips when unreachable)
 API_URL=http://localhost:8000 pytest tests/smoke_tests.py -v
+
+# Verify the README quickstart end to end (data -> train -> API -> curls -> tests)
+./scripts/verify_readme.sh
 ```
 
 ---
