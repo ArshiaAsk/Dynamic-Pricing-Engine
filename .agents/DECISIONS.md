@@ -5,7 +5,7 @@ Ongoing log of decisions that shape this project. Each entry is one decision.
 
 **Reference commits:** Ground truth verified against commit `c32841f` (see `.agents/STATE.md`). This planning revision sits on top of the working tree at the current commit (see `git log -1`); no new commit was created for these `.agents/` edits.
 
-Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D5, D6, D9, D10, D12, D13, D15, D16, D17, D26, D27, D28, D29, and D30 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30; D9, D10, and D12 on 2026-10-15; D13 on 2026-10-07 retroactively, implemented via R15, at the owner's direction; D16 and D17 on 2026-10-13; D26 on 2026-10-13; D27 on 2026-10-13; D28 on 2026-10-14; D29 on 2026-10-15; D30 on 2026-10-15); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
+Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D4, D5, D6, D8, D9, D10, D11, D12, D13, D15, D16, D17, D26, D27, D28, D29, and D30 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30; D9, D10, and D12 on 2026-10-15; D13 on 2026-10-07 retroactively, implemented via R15, at the owner's direction; D16 and D17 on 2026-10-13; D26 on 2026-10-13; D27 on 2026-10-13; D28 on 2026-10-14; D29 on 2026-10-15; D30 on 2026-10-15; D4, D8, and D11 on 2026-10-16); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
 
 ---
 
@@ -31,11 +31,12 @@ Decision: (Superseded — folded into D2, which fixes both the search method and
 Consequences: (Superseded — see D2. Unknown method values must return 4xx, not 500; the legacy `"bayesian"` method is rejected with HTTP 422, per D2.)
 
 ## D4: One source of truth for feature construction (train and serve)
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-16)
+Status: accepted
 Context: Training builds features in `src/features/feature_builder.py`, while serving builds them ad hoc in each optimizer (`bayesian_optimizer._build_features`, `optimizer.optimize`), and a third path lives in `src/features/transformer.py`; the divergence is what caused the grid `KeyError`.
 Decision: Define the serving feature set once and have both optimizers consume it, keeping it explicitly consistent with the training feature list in `models/features.json`; delete the unused `transformer.py` path.
 Consequences: Requires ROADMAP R4 and a test asserting both optimizers emit identical feature vectors; any feature added to training must be added to the serving builder in the same PR.
+Implementation note (2026-10-16): implemented via R4 — `src/pricing/features.py::build_serving_features` is the single serving builder; `transformer.py` and the second optimizer were deleted in R22, so the "both optimizers" wording above is historical.
 
 ## D5: Drop `product_id` as a model feature
 Date: 2026-09-27 (accepted 2026-09-30)
@@ -59,11 +60,12 @@ Decision: Make MLflow optional and import it lazily; the API must start and serv
 Consequences: Requires ROADMAP R3 and a test that imports the API with MLflow unavailable; rules out any top-level unconditional `import mlflow` on the serving path.
 
 ## D8: Local model artifact is the serving source of truth
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-16)
+Status: accepted
 Context: The engine attempts an MLflow registry load but always falls back to `models/demand_model.pkl`; the registry has no Production stage/alias, so the "versioned model" path is dead at serve time.
 Decision: Treat `models/demand_model.pkl` + `models/features.json` as the canonical served artifact; use MLflow only for experiment tracking and, optionally, a registry that must be explicitly promoted.
 Consequences: Requires ROADMAP R5 (loud, correct fallback) and R8/R9 (tests run against the local artifact); the README must not imply registry-driven serving until a Production alias actually exists.
+Implementation note (2026-10-16): local `models/demand_model.pkl` + `models/features.json` are the canonical served artifact; the MLflow registry lookup (`engine._resolve_production`/`load_model`) stays as an optional, explicitly promoted path (`scripts/promote_model.py`) with a loud fallback; the README must not imply registry-driven serving until a production alias exists (handled in R23).
 
 ## D9: Remove the SQLite ingestion path
 Date: 2026-09-27 (accepted 2026-10-15)
@@ -81,11 +83,12 @@ Decision: Keep the JSONL prediction log as the audit store and drop the database
 Consequences: Depends on D9; log retention/rotation must be handled explicitly (see D11) rather than assumed.
 
 ## D11: Pick one configuration mechanism per concern
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-16)
+Status: accepted
 Context: The API reads runtime settings from env vars while `configs/config.dev.yaml`/`prod.yaml` carry unread `api:` and `logging:` blocks, and `config.yaml` carries an unread `monitoring:` block.
 Decision: Use env vars for runtime toggles (API host/port/workers, rate limit, logging, timeouts) and YAML for model/training/feature parameters; delete every config key that is not read.
 Consequences: Requires ROADMAP R18/R19 and a test that fails on any unread YAML key or `.env` variable; rules out keeping decorative config sections.
+Implementation note (2026-10-16): implemented via R18/R19/R35 and enforced by `tests/test_config.py` and `tests/test_env.py`.
 
 ## D12: Delete dead modules rather than keep them "for later"
 Date: 2026-09-27 (accepted 2026-10-15)
@@ -235,4 +238,4 @@ Consequences: Two clean clones now produce byte-identical data and (metrics-)ide
 
 ---
 
-Last updated: 2026-10-15 (D9, D10, and D12 accepted — remove the SQLite ingestion path, keep the JSONL prediction logs, and delete dead modules rather than keep them "for later"; R22 implements them, with the user decision that the local untracked `data.db` is not deleted; D30 accepted — seed the synthetic data generator, make the dataset size and seed config-driven, build data + model inside the main image, and keep local artifacts out of the build context; D29 accepted 2026-10-15 — track `.dockerignore`, de-indent every line, and exclude `.env` from the image so local config is never baked in; D28 accepted 2026-10-14 — untrack the stale `mlflow.db` and ignore it, strip the leading spaces from `.dockerignore` lines 42-43, no history rewrite and the file stays on disk; D27 accepted 2026-10-13 — dependency pin policy: pin the installed stack, `xgboost-cpu`, mlflow 3.x with sqlite registry tests/promote default; D16 and D17 accepted earlier that day — public base image for Docker builds, and remove the nginx reverse proxy from the demo; D26 accepted 2026-10-13 — single config file, drop APP_ENV-driven YAML selection; see `.agents/STATE.md`).
+Last updated: 2026-10-16 (D4, D8, and D11 accepted — one source of truth for feature construction (R4); the local `models/demand_model.pkl` + `models/features.json` are the canonical served artifact with the MLflow registry as an optional, explicitly promoted path (R5); and one configuration mechanism per concern, enforced by `tests/test_config.py`/`tests/test_env.py` (R18/R19/R35). Prior: 2026-10-15 — D9, D10, and D12 accepted — remove the SQLite ingestion path, keep the JSONL prediction logs, and delete dead modules rather than keep them "for later"; R22 implements them, with the user decision that the local untracked `data.db` is not deleted; D30 accepted — seed the synthetic data generator, make the dataset size and seed config-driven, build data + model inside the main image, and keep local artifacts out of the build context; D29 accepted 2026-10-15 — track `.dockerignore`, de-indent every line, and exclude `.env` from the image so local config is never baked in; D28 accepted 2026-10-14 — untrack the stale `mlflow.db` and ignore it, strip the leading spaces from `.dockerignore` lines 42-43, no history rewrite and the file stays on disk; D27 accepted 2026-10-13 — dependency pin policy: pin the installed stack, `xgboost-cpu`, mlflow 3.x with sqlite registry tests/promote default; D16 and D17 accepted earlier that day — public base image for Docker builds, and remove the nginx reverse proxy from the demo; D26 accepted 2026-10-13 — single config file, drop APP_ENV-driven YAML selection; see `.agents/STATE.md`).
