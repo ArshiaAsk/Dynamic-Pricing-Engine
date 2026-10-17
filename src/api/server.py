@@ -9,12 +9,7 @@ from src.api.middleware import (
     ErrorHandlingMiddleware,
     TimeoutMiddleware
 )
-from src.api.error_handlers import (
-     validation_exception_handler,
-     generic_exception_handler,
-     api_error_handler,
-     APIError
- )
+from src.api.error_handlers import validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from src.utils.env_config import get_config
 from src.utils.logger import setup_logging_from_env
@@ -38,8 +33,6 @@ app = FastAPI(
 )
 # Add exception handlers
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(APIError, api_error_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
 
 # Add CORS middleware
 cors_enabled = config.get_bool("CORS_ENABLED", True)
