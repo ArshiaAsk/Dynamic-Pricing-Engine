@@ -191,6 +191,24 @@ API_URL=http://localhost:8000 pytest tests/smoke_tests.py -v
 ./scripts/verify_readme.sh
 ```
 
+### Coverage
+
+The pricing and serving packages are measured together (`src/pricing` + `src/api`)
+with the suite's own tests:
+
+| Package | Line coverage |
+|---|---|
+| `src/api` | 98% (228/233 statements) |
+| `src/pricing` | 96% (150/156 statements) |
+| Combined | 97% (378/389 statements) |
+
+```bash
+pytest tests --cov=src/pricing --cov=src/api --cov-report=term-missing
+```
+
+CI enforces at least 80% line coverage for every file under `src/pricing/` and
+`src/api/` (`scripts/check_coverage.py`), on top of the 80% combined floor.
+
 ---
 
 ## Production Setup
