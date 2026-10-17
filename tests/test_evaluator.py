@@ -97,3 +97,26 @@ class TestModelEvaluator:
         assert 'residual_max' in residuals
         assert 'residual_q25' in residuals
         assert 'residual_q75' in residuals
+
+    def test_train_metrics_and_overfit_gap_only_when_train_data_given(self, evaluator, mock_model):
+        """R30: X_train/y_train add Train_* metrics and the overfit gap."""
+        X_val = pd.DataFrame({'feature1': [1, 2, 3, 4, 5]})
+        y_val = np.array([48, 52, 47, 58, 50])
+        X_train = pd.DataFrame({'feature1': [6, 7, 8, 9, 10]})
+        y_train = np.array([49, 54, 46, 59, 51])
+
+        with_train = evaluator.evaluate(mock_model, X_val, y_val, X_train, y_train)
+
+        assert 'Train_R2' in with_train
+        assert 'Train_MAE' in with_train
+        assert with_train['Overfit_Gap_R2'] == pytest.approx(
+            with_train['Train_R2'] - with_train['R2']
+        )
+        assert with_train['Overfit_Gap_MAE'] == pytest.approx(
+            with_train['Train_MAE'] - with_train['MAE']
+        )
+
+        without_train = evaluator.evaluate(mock_model, X_val, y_val)
+
+        assert 'Train_R2' not in without_train
+        assert 'Overfit_Gap_R2' not in without_train
