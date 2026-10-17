@@ -24,17 +24,6 @@ logger = get_logger(__name__)
 CONFIG_PATH = Path("configs/config.yaml")
 
 
-# New CI function for get metadata
-def get_ci_metadata():
-    return {
-        "ci_run_id": os.getenv("GITHUB_RUN_ID"),
-        "commit_sha": os.getenv("GITHUB_SHA"),
-        "branch": os.getenv("GITHUB_REF_NAME"),
-        "actor": os.getenv("GITHUB_ACTOR"),
-        "executer": "github_action" if os.getenv("GITHUB_RUN_ID") else "local"
-    }
-
-
 def load_config():
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
@@ -55,12 +44,6 @@ def main():
     tracker = MlflowTracker("demand_forecasting")
 
     with tracker.start_run(run_name="xgboost_optuna_training"):
-
-        # Add CI tags to mlflow
-        ci_meta = get_ci_metadata()
-        for key, value in ci_meta.items():
-            if value:
-                mlflow.set_tag(key, value)
 
         # log config parameters
         tracker.log_params(config["model"])
