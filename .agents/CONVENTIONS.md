@@ -89,6 +89,7 @@ If you cannot check a rule, it is not a rule. New rules are appended at the end 
 
 ### Commit hygiene
 35. Every commit must leave the full test suite green. A config key and the code that reads it go in the same commit (a transient red commit hurts git bisect). Example: commit `ae01b35` added the `data.seed` key without its reader, so the suite was red until `d29dfa8` added the reader. — `enforced (process)`
+36. Scripts and tests must not depend on how the repository was checked out: no `git` subprocess calls and no `.git` directory in tests; read tracked files directly. Verify CI scripts at the committed HEAD (`scripts/verify_readme.sh` archives HEAD), never before committing the files they should test. Example: commit `3723295`'s `test_workflow_file_is_not_gitignored` failed in CI's `git archive HEAD` checkout with `git check-ignore` exit 128; fixed in `caae3aa` by parsing `.gitignore` in pure Python. — `enforced (process: tests/test_ci_workflow.py reads .gitignore directly)`
 
 ---
 

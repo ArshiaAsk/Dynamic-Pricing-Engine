@@ -17,6 +17,26 @@ Next session should start with:
 
 ---
 
+## 2026-10-18 — CI archive-checkout failure fixed, HF deployment removed, R29 closed; D31 proposed
+
+Done:
+- **C1 `caae3aa` — `fix(tests): workflow-not-ignored check must not need a git checkout (CI)`.** `tests/test_ci_workflow.py` only (+75/−8). **Reproduced raw** in a `git archive HEAD` export (`/tmp/arch_repro`, data+model built with `.venv/bin/python`): `tests/test_ci_workflow.py::test_workflow_file_is_not_gitignored` failed with `assert 128 == 1` — `fatal: not a git repository` (7 passed, 1 failed); the same file in the repo → 8 passed. **Audit** (`git grep -n -E "subprocess|check-ignore|\.git\b|git " -- tests scripts`): only `test_ci_workflow.py` depended on git; `scripts/verify_readme.sh` legitimately runs `git archive HEAD` from the repo (it has `.git`), and the other `subprocess` uses (`bash -n`, `docker compose config`, Python subprocesses) do not need `.git`. **Fix:** parse `.gitignore` in pure Python (`fnmatch`, comments/blanks stripped, leading `/` anchored, trailing `/` directory-only, later `!` re-includes); the docstring/comment document the simplification and that it mirrors `tests/test_repo_hygiene.py`'s `.dockerignore` parsing. **Mutation proof** in `/tmp/arch_repro`: append `.github/` → the test fails; restore → passes. Pattern matrix: `.github`, `.github/`, `.github/*`, `.github/workflows`, `*.yml`, `ci.yml` all fail the test; `.github/` + `!.github/workflows/ci.yml` passes. **Post-commit `bash scripts/ci_check.sh`** at `caae3aa` (clean tree, port 8765 free) → exit 0, all PASS: build data+model, 124 passed, **97.17%** combined, per-file gate 9/9, zero-skip gate, archive `verify_readme.sh` (124 passed), smoke 8 passed, `py_compile`. Nothing on :8765 afterwards; `git status --short` clean.
+- **C2 `5aa5d58` — `chore: remove the Hugging Face deployment files (user decision)`.** Deleted `Dockerfile.hf`, `docker-compose.hf.yml`, `start.sh`, `tests/test_start_sh.py` (−206 lines). **Reference list before** (outside `.agents`): `Dockerfile.hf` ← `docker-compose.hf.yml:7`; `start.sh` ← `Dockerfile.hf:41-42`, `tests/test_start_sh.py:18` (plus docstring mentions in `scripts/promote_model.py:9` and `tests/test_promote_default_uri.py:3`); README had **no** HF/`start.sh` reference, so it was not edited. `start.sh`'s only functional consumers were `Dockerfile.hf` and `tests/test_start_sh.py` → both deleted. **Coverage-preservation table** (deleted tests): `test_mlflow_loop_gives_up_and_exits_nonzero` (non-2xx MLflow → non-zero + message) — kept live-path test: **NONE**; `test_api_loop_gives_up_after_mlflow_becomes_healthy` (bounded API wait) — **NONE**; NONE is acceptable because the code under test (`start.sh`) is deleted with them. `tests/test_compose_files.py` is glob-based and still discovers `docker-compose.yml` + `docker-compose.prod.yml` (2 files, 7 parametrized tests); no assertion named the HF file. Suite **124 → 120 passed, 0 skipped**; fresh `git archive HEAD` at `5aa5d58` after data+model → **120 passed**. Remaining references are docstring-only (flagged).
+- **C3 (this commit) — `docs(agents): record CI first-run findings, convention 36, HF removal, R29; propose D31`.** STATE/LOG/ROADMAP/CONVENTIONS/DECISIONS only. R27 stays `in-progress` (first run failed; awaiting a green run of both jobs after the push); R29 → `done` (`data.db` and `.venv.old` absent; module/scripts/README claims gone; no orphan); convention 36 added; D31 `proposed` (one hardened image; **not implemented**).
+
+Left open / blocked:
+- R27 remains `in-progress` until the owner pushes and reports a fully green `test` + `docker` run; README then documents CI status.
+- D31 is `proposed`; do not implement.
+- Stale docstrings mention `start.sh` in `scripts/promote_model.py:9` and `tests/test_promote_default_uri.py:3` (no test impact; left untouched in C2 to keep the commit to deletions).
+
+Next session should start with:
+- Read `.agents/STATE.md` (first CI run + fix), then await the owner's green-run report; if green, close R27 and update README.
+- If the owner accepts D31, implement it as its own item (do not touch `Dockerfile` before acceptance).
+
+Flags:
+- The prompt's "125+ tests" expectation was wrong: the fix replaces no test, so the archive suite stays 124 (120 after C2).
+- Action versions (`actions/checkout@v4`, `actions/setup-python@v5`) and the GitHub runner environment are user-reported, not verified here.
+
 ## 2026-10-17 — D7/D18–D21/D24/D25 accepted; R30 done; R28 done; R27 in-progress (first GitHub run outstanding)
 
 Done:
