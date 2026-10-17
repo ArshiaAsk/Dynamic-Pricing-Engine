@@ -4,6 +4,7 @@ No network and no Docker: the workflow, the scripts it calls and the Dockerfile
 are read from disk. PyYAML implements YAML 1.1, which parses the bare ``on:``
 key as the boolean ``True``; the helper below accepts either form.
 """
+import fnmatch
 import re
 import subprocess
 from pathlib import Path
@@ -114,13 +115,79 @@ def test_ci_scripts_exist_are_executable_and_parse(workflow):
             assert result.returncode == 0, f"{relative}: {result.stderr}"
 
 
+def _ignore_patterns(path):
+    """Yield `(negated, pattern, directory_only)` from an ignore file.
+
+    Simplified gitignore parsing: blank lines and `#` comments are skipped,
+    a leading `/` anchors the pattern to the repository root, a trailing `/`
+    marks a directory-only pattern, and a leading `!` re-includes. Escapes and
+    character classes beyond `fnmatch` are not modelled.
+    """
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        negated = line.startswith("!")
+        if negated:
+            line = line[1:].strip()
+            if not line:
+                continue
+        directory_only = line.endswith("/")
+        line = line.strip("/")
+        if line:
+            yield negated, line, directory_only
+
+
+def _pattern_matches(pattern, candidate):
+    """Match one normalised pattern against a repo-relative path.
+
+    A pattern containing a slash is anchored at the root; a pattern without one
+    matches a single path component at any depth (gitignore's `*.yml` rule).
+    """
+    if "/" in pattern:
+        return fnmatch.fnmatchcase(candidate, pattern)
+    return fnmatch.fnmatchcase(candidate.rsplit("/", 1)[-1], pattern)
+
+
+def _is_gitignored(relative_path, gitignore):
+    """Return whether `relative_path` is ignored by `gitignore`.
+
+    This is a deliberate simplification of gitignore semantics, not a full git
+    implementation. The path and each of its parent directories are tested
+    against every pattern, and the last matching pattern wins (so a later `!`
+    re-inclusion cancels an earlier match). Negations are honoured only when
+    they match the path itself; git's rule that a file inside an ignored
+    directory cannot be re-included is not modelled, because the only question
+    here is whether this one tracked workflow path is ignored.
+
+    The test must not shell out to `git`: `scripts/verify_readme.sh` runs the
+    suite in a `git archive HEAD` export that has no `.git` directory, so a
+    `git check-ignore` subprocess fails there with exit 128. Parsing the ignore
+    file in pure Python mirrors the approach already used for
+    `.dockerignore` in `tests/test_repo_hygiene.py`.
+    """
+    candidates = []
+    parts = relative_path.split("/")
+    for index in range(len(parts), 0, -1):
+        candidates.append("/".join(parts[:index]))
+    directories = candidates[1:]
+
+    ignored = False
+    for negated, pattern, directory_only in _ignore_patterns(gitignore):
+        pool = directories if directory_only else candidates
+        if any(_pattern_matches(pattern, candidate) for candidate in pool):
+            ignored = not negated
+    return ignored
+
+
 def test_workflow_file_is_not_gitignored():
-    """A workflow under an ignored path would never reach GitHub."""
-    result = subprocess.run(
-        ["git", "check-ignore", "-q", str(WORKFLOW)],
-        cwd=REPO_ROOT,
-        capture_output=True,
-    )
-    assert result.returncode == 1, (
-        f"{WORKFLOW} is ignored by git (check-ignore exit {result.returncode})"
+    """A workflow under an ignored path would never reach GitHub.
+
+    Reads `.gitignore` directly instead of running `git check-ignore`: CI's
+    archive checkout (`scripts/verify_readme.sh`) has no `.git` directory.
+    The matcher is intentionally simplified; see `_is_gitignored`.
+    """
+    relative = WORKFLOW.relative_to(REPO_ROOT).as_posix()
+    assert not _is_gitignored(relative, REPO_ROOT / ".gitignore"), (
+        f"{relative} is ignored by .gitignore"
     )
