@@ -317,6 +317,31 @@ visible as `checks.model.source == "local"` on `/v1/health`.
 
 ---
 
+## Limitations
+
+- **The demand model is observational.** It is trained on historical price/demand
+  pairs from the synthetic generator, not on controlled price experiments, so it
+  learns the associations present in that data.
+- **`argmax_price E[units | price]` is not a valid causal pricing policy on real
+  data.** The model learns association, not causation: in real data prices are set
+  in response to demand, competitors and inventory, so the estimated price response
+  can be confounded, and a revenue-maximizing price derived from it can be wrong.
+- **All results are on synthetic data.** Every metric describes how well the model
+  learns the synthetic generator, not real-world accuracy.
+- **Rate limiting is in-memory and per worker process.** Each process keeps its own
+  sliding window; limits are not shared across workers and reset on restart.
+- **No authentication, authorization or TLS.** The API is unauthenticated, serves
+  plain HTTP, and CORS defaults to `*` (`src/api/server.py:50`).
+- **The model artifact is a joblib pickle tied to the installed XGBoost version.**
+  Loading an artifact produced by a different XGBoost version can warn or fail;
+  retrain after upgrading the stack.
+- **The MLflow registry is optional and requires explicit promotion.** With no
+  promoted production alias the service falls back to the local pickle.
+- **There is no drift monitoring and no automated retraining.** Drift detection and
+  performance monitoring were removed (R15/D13); retraining is manual.
+
+---
+
 ## Configuration
 
 Edit `configs/config.yaml` (the single configuration file) for model, training and

@@ -19,6 +19,11 @@ Two checks:
 The Markdown *link* targets (e.g. ``docs/API.md``) are deliberately **not**
 checked here: R31 owns broken doc links; R23 only keeps the code spans/blocks
 honest.
+
+The forbidden-phrase scan **skips the text of the ``## Limitations`` section**.
+That section is the one place where stating that something does *not* exist
+(e.g. drift detection, authentication) is required, so absence words such as
+``drift`` are legitimate there. Everywhere else the check is unchanged.
 """
 import re
 from pathlib import Path
@@ -127,8 +132,18 @@ def _find_phrase(text_lower: str, phrase: str):
     return re.search(pattern, text_lower)
 
 
+_LIMITATIONS_RE = re.compile(
+    r"^## Limitations\s*$.*?(?=^## |\Z)", re.MULTILINE | re.DOTALL
+)
+
+
+def _without_limitations(text: str) -> str:
+    """Drop the Limitations section: absence statements are legitimate there."""
+    return _LIMITATIONS_RE.sub("", text)
+
+
 def test_readme_has_no_removed_claims():
-    text_lower = README.read_text(encoding="utf-8").lower()
+    text_lower = _without_limitations(README.read_text(encoding="utf-8")).lower()
     offenders = []
     for phrase, reason in FORBIDDEN_PHRASES:
         if _find_phrase(text_lower, phrase):
