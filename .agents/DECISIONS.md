@@ -5,7 +5,7 @@ Ongoing log of decisions that shape this project. Each entry is one decision.
 
 **Reference commits:** Ground truth verified against commit `c32841f` (see `.agents/STATE.md`). This planning revision sits on top of the working tree at the current commit (see `git log -1`); no new commit was created for these `.agents/` edits.
 
-Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D4, D5, D6, D8, D9, D10, D11, D12, D13, D15, D16, D17, D26, D27, D28, D29, and D30 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30; D9, D10, and D12 on 2026-10-15; D13 on 2026-10-07 retroactively, implemented via R15, at the owner's direction; D16 and D17 on 2026-10-13; D26 on 2026-10-13; D27 on 2026-10-13; D28 on 2026-10-14; D29 on 2026-10-15; D30 on 2026-10-15; D4, D8, and D11 on 2026-10-16); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
+Every entry below is seeded from `.agents/STATE.md` and `.agents/ROADMAP.md`. **D1, D2, D4, D5, D6, D8, D9, D10, D11, D12, D13, D15, D16, D17, D26, D27, D28, D29, and D30 are `accepted` (D15 on 2026-09-28; D1 and D2 on 2026-09-29; D5 and D6 on 2026-09-30; D9, D10, and D12 on 2026-10-15; D13 on 2026-10-07 retroactively, implemented via R15, at the owner's direction; D16 and D17 on 2026-10-13; D26 on 2026-10-13; D27 on 2026-10-13; D28 on 2026-10-14; D29 on 2026-10-15; D30 on 2026-10-15; D4, D8, and D11 on 2026-10-16; D7, D18, D19, D20, D21, D24, and D25 on 2026-10-17); D3, D14, D22, and D23 are `superseded` (each links to its successor or to the rule/item that now covers it); every other entry remains `proposed` and awaits the owner's acceptance or override.** Do not implement a proposed decision until it is marked `accepted`.
 
 ---
 
@@ -53,11 +53,12 @@ Decision: Split chronologically (hold out the last N days) and report the split 
 Consequences: Requires ROADMAP R12 and updated metrics; the reported R² will likely change and must be regenerated, not carried over.
 
 ## D7: MLflow becomes an optional, lazily-imported dependency
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-17)
+Status: accepted
 Context: `import mlflow` at module top level makes the API, the tuning script, and `tests/test_api.py` fail to start when MLflow is unavailable (`engine.py:9`), and the committed registry has no Production version anyway.
 Decision: Make MLflow optional and import it lazily; the API must start and serve from the local model artifact with MLflow absent or misconfigured.
 Consequences: Requires ROADMAP R3 and a test that imports the API with MLflow unavailable; rules out any top-level unconditional `import mlflow` on the serving path.
+Implementation note (2026-10-17): implemented via R3 (mlflow lazy import); the premise about the top-level import is historical.
 
 ## D8: Local model artifact is the serving source of truth
 Date: 2026-09-27 (accepted 2026-10-16)
@@ -133,32 +134,36 @@ Decision: Remove the nginx service and its README claims for the demo rather tha
 Consequences: Requires ROADMAP R24; rules out any "reverse proxy / TLS termination" claim unless a real config is added later.
 
 ## D18: Add a minimal CI pipeline
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-17)
+Status: accepted
 Context: No `.github/` directory or workflow exists despite README CI/CD claims, and the test suite currently cannot even collect.
 Decision: Add a GitHub Actions workflow that runs `pytest tests/` and `docker build` on push, after the suite is made collectable.
 Consequences: Requires ROADMAP R8 and R27; rules out advertising CI/CD until a workflow actually runs green.
+Implementation note (2026-10-17): the premise "suite cannot collect" is historical (R8); implemented by R27 as a GitHub Actions workflow whose steps call repo scripts — the test job builds data+model first (`python scripts/regenerate_data.py && python -m src.training.train`), runs the full suite with a zero-skipped-tests gate and the coverage gate, and runs `scripts/verify_readme.sh` (quickstart, live API, smoke tests); a docker job builds the main Dockerfile and runs `docker compose up -d pricing-api` plus a bounded health check. README mentions CI only after the user confirms a green run.
 
 ## D19: Remove the AWS deployment claims
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-17)
+Status: accepted
 Context: README documents an AWS EC2 deployment flow and references `scripts/deploy.sh` and `scripts/pre_deploy_check.sh`, neither of which exists.
 Decision: Delete the AWS deployment section and links from the README rather than build cloud deploy tooling for a demo.
 Consequences: Requires ROADMAP R28; rules out "automated deployment / rollback" claims until scripts exist and are tested.
+Implementation note (2026-10-17): the README AWS/EC2 sections and the `DEPLOYMENT.md` link were removed (R23, R31); no deployment scripts will be created; R28 closes through its "remove the references" branch.
 
 ## D20: Keep and fix the Streamlit UI
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-17)
+Status: accepted
 Context: `app.py` is the project's visible demo surface but currently cannot render a result (wrong response field, rejected method, fabricated Advanced-tab response).
 Decision: Keep Streamlit as the demo UI and fix the API contract and fabricated data rather than replace it.
 Consequences: Requires ROADMAP R10/R11 and a consumer-vs-schema contract test; rules out adding new UI fields without updating the schema test.
+Implementation note (2026-10-17): implemented via R10/R11, guarded by `tests/test_streamlit_contract.py`; `app.py:65-66` Product ID input still has no help text (open).
 
 ## D21: Return generic errors to API clients
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-17)
+Status: accepted
 Context: `src/api/router.py:108` returns raw exception text (including internal column names) to clients.
 Decision: Return a generic message plus `request_id` on 5xx and log the exception server-side; specific validation errors keep their field-level detail.
 Consequences: Requires ROADMAP R16 and a test asserting no internal error strings appear in responses.
+Implementation note (2026-10-17): implemented via R16, guarded by `test_optimizer_failure_returns_generic_error`.
 
 ## D22: Keep rate limiting in-memory (single process)
 Date: 2026-09-27
@@ -175,18 +180,20 @@ Decision: (Superseded — no separate action. "Keep synthetic data but label it 
 Consequences: (Superseded — enforced as part of R23/R32; rules out presenting the metrics as real-world performance.)
 
 ## D24: Standardize on module-form entry points
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-17)
+Status: accepted
 Context: `python src/training/train.py` fails with `ModuleNotFoundError` because the script does not add the repo root to `sys.path`, while `python -m src.training.train` works.
 Decision: Make `python -m src.training.train` and `python -m src.api.server` the canonical commands and remove or fix the direct-script forms.
 Consequences: Requires README updates and `scripts/verify_readme.sh` (ROADMAP R23); rules out documenting commands that are not executed in CI.
+Implementation note (2026-10-17): implemented via R23 (README documents `python -m src.training.train` and `python -m src.api.server`; `scripts/verify_readme.sh` runs them).
 
 ## D25: Enforce a coverage floor on the pricing and API paths
-Date: 2026-09-27
-Status: proposed
+Date: 2026-09-27 (accepted 2026-10-17)
+Status: accepted
 Context: Stored coverage is 69% overall, and the modules that matter most (the optimizer, the API contract) are exactly the ones the current tests fail to exercise realistically.
 Decision: Require ≥ 80% line coverage for `src/pricing/*` and `src/api/*` and enforce it in CI.
 Consequences: Requires ROADMAP R7/R9/R30; rules out adding pricing or API code without tests.
+Implementation note (2026-10-17): enforced in CI — >= 80% line coverage for every file under `src/pricing` and `src/api` (per-file check via coverage JSON) plus `--cov-fail-under=80` on the two packages combined; measured baseline before this batch: 89% combined (`error_handlers.py` 63%, `middleware.py` 78%).
 
 ## D26: Single config file; drop APP_ENV-driven YAML selection
 Date: 2026-10-13
