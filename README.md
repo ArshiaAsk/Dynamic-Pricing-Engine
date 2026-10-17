@@ -339,18 +339,6 @@ training:
 
 ---
 
-## Documentation
-
-| Document | Purpose |
-|----------|---------|
-| [API.md](docs/API.md) | Complete API endpoint reference |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | AWS deployment guide with step-by-step instructions |
-| [OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day operations, troubleshooting, incident response |
-| [PRODUCTION_FEATURES.md](PRODUCTION_FEATURES.md) | Detailed feature implementation guide |
-| [PRODUCTION_READY.md](PRODUCTION_READY.md) | Production readiness checklist |
-
----
-
 ## Troubleshooting
 
 ### API not responding
@@ -374,8 +362,6 @@ python scripts/train_with_tuning.py
 # Deploy new model
 docker-compose -f docker-compose.prod.yml restart pricing-api
 ```
-
-See [OPERATIONS.md](docs/OPERATIONS.md) for complete troubleshooting guide.
 
 ---
 
@@ -415,9 +401,8 @@ Code quality requirements:
 ## Support & Issues
 
 For issues or questions:
-1. Check [OPERATIONS.md](docs/OPERATIONS.md) troubleshooting section
-2. Review logs: `./scripts/logs.sh`
-3. Run health check: `./scripts/health_check.sh`
+1. Review logs: `./scripts/logs.sh`
+2. Run health check: `./scripts/health_check.sh`
 
 ---
 

@@ -99,6 +99,7 @@ FORBIDDEN_PHRASES = [
     ("restore_database", "scripts/restore_database.sh was deleted (R22/D9)"),
     ("pre_deploy_check", "scripts/pre_deploy_check.sh does not exist (STATE.md §1)"),
     ("deploy.sh", "scripts/deploy.sh does not exist (STATE.md §1, D19)"),
+    ("aws", "no AWS tooling or deployment exists (STATE.md §1, D19)"),
     ("deploy to aws", "no AWS deployment flow exists (D19)"),
     ("ec2", "no AWS EC2 deployment exists (D19)"),
     ("default_method", "the config key pricing.default_method was removed in R18"),
