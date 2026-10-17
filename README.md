@@ -17,7 +17,7 @@ grid-search optimizer to maximize revenue while respecting business constraints
 
 ### What You Get
 
-- 🤖 **ML Demand Forecasting**: XGBoost model predicting product demand (on synthetic data; R² 0.419 / MAPE 0.351 at seed 42 — see [Model Performance](#model-performance))
+- 🤖 **ML Demand Forecasting**: XGBoost model predicting product demand (on synthetic data; R² 0.447 ± 0.029 / MAPE 0.361 ± 0.011 over data seeds 1–10, with the configured seed 42 as the reference run: R² 0.419 / MAPE 0.351 — see [Model Performance](#model-performance))
 - 💰 **Price Optimization**: a `grid_search` optimizer that maximizes expected revenue under business constraints
 - 🚀 **FastAPI Service**: REST API for pricing decisions, with Swagger/ReDoc
 - 📊 **Health & Monitoring**: health/readiness/liveness checks, `/v1/metrics`, prediction logging
@@ -286,9 +286,14 @@ workers, so with more than one worker each process enforces its own limit.
 
 ## Model Performance
 
-All data and metrics are **synthetic**. The numbers below are the seeded run
-(`data.seed: 42`, 50 products × 365 days, 30 features, chronological 80/20 split)
-recorded in `reports/training_metrics.json`; regenerate them with the commands above.
+All data and metrics are **synthetic**. Across data seeds 1–10 the model's R² is
+**0.447 ± 0.029** (range 0.406–0.500) and MAPE **0.361 ± 0.011** (range
+0.347–0.380); the seed-to-seed spread is material. The configured seed 42 is
+**the reference run** (`data.seed: 42`, 50 products × 365 days, 30 features,
+chronological 80/20 split), recorded in `reports/training_metrics.json`;
+regenerate it with the commands above.
+
+Reference run (seed 42):
 
 - **R² Score**: 0.419
 - **MAPE**: 0.351
@@ -296,10 +301,8 @@ recorded in `reports/training_metrics.json`; regenerate them with the commands a
 - **RMSE**: 30.97
 - **Directional Accuracy**: 0.734
 
-The seed-to-seed spread is material: over seeds 1–10 the R² ranges 0.406–0.500
-(mean 0.447 ± 0.029) and MAPE 0.347–0.380 (mean 0.361 ± 0.011). The served
-`grid_search` optimizer returns ≥ 0.99× the test-time reference optimum across the
-optimizer test ranges, and for every seed in 1–10.
+The served `grid_search` optimizer returns ≥ 0.99× the test-time reference optimum
+across the optimizer test ranges, and for every seed in 1–10.
 
 Feature importance: `reports/feature_importance.csv` (generated).
 
