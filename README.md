@@ -22,7 +22,7 @@ grid-search optimizer to maximize revenue while respecting business constraints
 - 🚀 **FastAPI Service**: REST API for pricing decisions, with Swagger/ReDoc
 - 📊 **Health & Monitoring**: health/readiness/liveness checks, `/v1/metrics`, prediction logging
 - 🐳 **Docker Deployment**: the image builds its own data + model
-- 🔒 **Basic Hardening**: rate limiting (in-memory, per worker), input validation, generic error responses, non-root prod container
+- 🔒 **Basic Hardening**: rate limiting (in-memory, per worker), input validation, generic error responses, container image runs as a non-root user and has a healthcheck
 - 📈 **Operations Tools**: health-check, metrics and log-viewer shell scripts
 - ✅ **Tested**: a pytest suite (unit + API contract + architecture) and offline-skipping smoke tests
 
@@ -46,7 +46,7 @@ grid-search optimizer to maximize revenue while respecting business constraints
 - **Error Handling**: Global error handlers, input validation, graceful shutdown
 
 ### Deployment & Operations
-- **Docker Compose**: dev stack (`docker-compose.yml`) and prod stack (`docker-compose.prod.yml`)
+- **Docker Compose**: one stack (`docker-compose.yml`) for the API and MLflow
 - **Operations Tools**: health-check, metrics and log-viewer shell scripts
 
 ---
@@ -67,8 +67,7 @@ grid-search optimizer to maximize revenue while respecting business constraints
 ├── scripts/              # Data generation, training & operations scripts
 ├── models/               # Trained model & feature metadata
 ├── logs/                 # Prediction logs
-├── docker-compose.yml    # Development stack
-└── docker-compose.prod.yml # Production stack
+└── docker-compose.yml    # Single Docker stack
 ```
 
 ---
@@ -211,26 +210,27 @@ CI enforces at least 80% line coverage for every file under `src/pricing/` and
 
 ---
 
-## Production Setup
+## Docker Deployment
 
 ### Docker Compose
 
 ```bash
-# Build and start production services
-docker-compose -f docker-compose.prod.yml up -d
+# Build the image (data + model are built inside it) and start the stack
+docker compose up -d
 
 # View services
-docker-compose -f docker-compose.prod.yml ps
+docker compose ps
 
 # View logs
-docker-compose -f docker-compose.prod.yml logs -f pricing-api
+docker compose logs -f pricing-api
 
 # Stop services
-docker-compose -f docker-compose.prod.yml down
+docker compose down
 ```
 
-`docker-compose.prod.yml` mounts `./models` read-only, so the prod image serves
-whatever model is in the working tree (the main `Dockerfile` builds its own).
+The single `Dockerfile` installs dependencies in a builder stage, runs the API as
+the non-root `appuser`, and defines a `HEALTHCHECK` on `/v1/health`. The compose
+file mounts `configs/` read-only and keeps logs in the `app_logs` named volume.
 
 ---
 
@@ -285,16 +285,16 @@ find logs/ -name "*.jsonl" -mtime +7 -delete
 
 ```bash
 # Start services
-docker-compose -f docker-compose.prod.yml up -d
+docker compose up -d
 
 # Restart (for updates)
-docker-compose -f docker-compose.prod.yml restart pricing-api
+docker compose restart pricing-api
 
 # Stop services
-docker-compose -f docker-compose.prod.yml down
+docker compose down
 
 # View detailed logs
-docker-compose -f docker-compose.prod.yml logs -f --tail=100
+docker compose logs -f --tail=100
 ```
 
 Rate limiting is an in-memory, per-process sliding window: it is not shared across
@@ -387,7 +387,7 @@ training:
 ### API not responding
 ```bash
 ./scripts/health_check.sh
-docker-compose -f docker-compose.prod.yml logs pricing-api | tail -50
+docker compose logs pricing-api | tail -50
 ```
 
 ### High error rates
@@ -403,7 +403,7 @@ docker-compose -f docker-compose.prod.yml logs pricing-api | tail -50
 python scripts/train_with_tuning.py
 
 # Deploy new model
-docker-compose -f docker-compose.prod.yml restart pricing-api
+docker compose restart pricing-api
 ```
 
 ---
@@ -462,7 +462,7 @@ MIT License
 | Generate data | `python scripts/regenerate_data.py` |
 | Train model | `python -m src.training.train` |
 | Start API (dev) | `uvicorn src.api.server:app --reload` |
-| Start API (prod) | `docker-compose -f docker-compose.prod.yml up -d` |
+| Start API (Docker) | `docker compose up -d` |
 | Run tests | `pytest tests/ -v` |
 | Check health | `./scripts/health_check.sh` |
 | View metrics | `./scripts/metrics.sh` |

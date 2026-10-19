@@ -103,6 +103,8 @@ FORBIDDEN_PHRASES = [
     ("backup_database", "scripts/backup_database.sh was deleted (R22/D9)"),
     ("restore_database", "scripts/restore_database.sh was deleted (R22/D9)"),
     ("pre_deploy_check", "scripts/pre_deploy_check.sh does not exist (STATE.md §1)"),
+    ("Dockerfile.prod", "deleted in D31 (one hardened image)"),
+    ("docker-compose.prod", "deleted in D31 (one hardened image)"),
     ("deploy.sh", "scripts/deploy.sh does not exist (STATE.md §1, D19)"),
     ("aws", "no AWS tooling or deployment exists (STATE.md §1, D19)"),
     ("deploy to aws", "no AWS deployment flow exists (D19)"),
