@@ -191,3 +191,16 @@ def test_workflow_file_is_not_gitignored():
     assert not _is_gitignored(relative, REPO_ROOT / ".gitignore"), (
         f"{relative} is ignored by .gitignore"
     )
+
+
+def test_docker_smoke_script_checks_nonroot_health_and_mlflow():
+    """D31: the docker job verifies the hardened runtime, not just HTTP 200."""
+    script = (REPO_ROOT / "scripts" / "docker_smoke.sh").read_text(encoding="utf-8")
+    for needle in ("id -u", "State.Health.Status", ":5000/health", "docker compose down"):
+        assert needle in script, f"scripts/docker_smoke.sh is missing {needle!r}"
+    result = subprocess.run(
+        ["bash", "-n", str(REPO_ROOT / "scripts" / "docker_smoke.sh")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
