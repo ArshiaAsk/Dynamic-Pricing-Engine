@@ -472,7 +472,7 @@ P2 = R27–R33 (7 items). Total: 35 items.
   - The obsolete `version: "3.8"` key is still present in both compose files (`docker-compose.yml:1`, `docker-compose.prod.yml:1`).
   - `MONITORING_ENABLED=true` in `docker-compose.prod.yml:17` has **no reader** (unread since R19).
   - `Dockerfile.prod`, `Dockerfile.hf`, and `docker-compose.prod.yml`'s `./models:/app/models:ro` mount still ship **no model** on a fresh clone (only the main `Dockerfile` builds one — D30). Recorded under **R28** (deployment files), below.
-  - **All follow-ups closed (2026-10-19, D31):** `Dockerfile.mlflow` pins `mlflow==3.17.1`, `protobuf==4.25.9` and `psycopg2-binary==2.9.13` on `python:3.12-slim`, and the compose `mlflow` service no longer runs `pip install` at start; the obsolete `version` key is removed from `docker-compose.yml`; `MONITORING_ENABLED` is gone with `docker-compose.prod.yml`; `python:3.10` is resolved because the MLflow image is now `python:3.12-slim` (the same base as the API and CI).
+  - **All follow-ups closed (2026-10-19, D31):** `Dockerfile.mlflow` pins `mlflow==3.17.1`, `protobuf==4.25.9` and `psycopg2-binary==2.9.13` on `python:3.12-slim`, and the compose `mlflow` service no longer runs `pip install` at start; the obsolete `version` key is removed from `docker-compose.yml`; `MONITORING_ENABLED` is gone with `docker-compose.prod.yml`; `python:3.10` is resolved because the MLflow image is now `python:3.12-slim` (the same base as the API and CI). The mlflow-server health, previously unverified, is now covered by `scripts/docker_smoke.sh`; the first post-D31 run (2026-10-19) failed with a driver bug and the fix `0aeb1be` awaits a green re-run.
 
 ### R26 — Bounded startup in `start.sh`
 - **Priority:** P1
@@ -536,6 +536,8 @@ P2 = R27–R33 (7 items). Total: 35 items.
 - **Note (2026-10-18) — first GitHub run and fix.** The first `test` job run (2026-10-17, user-reported; Python 3.12.15, pytest 9.1.1, pytest-cov 7.1.0) passed build data+model, 124 tests, coverage 97.17%, the per-file gate (9 files) and the zero-skip gate, then failed in `scripts/verify_readme.sh`: inside its `git archive HEAD` checkout (no `.git`) `tests/test_ci_workflow.py::test_workflow_file_is_not_gitignored` ran `git check-ignore` → exit 128. Fixed in `caae3aa` by parsing `.gitignore` in pure Python (verified in the repo and in a `/tmp` archive export; mutation: appending `.github/` to a copy's `.gitignore` makes it fail, removing it passes). `bash scripts/ci_check.sh` at `caae3aa` → exit 0, all PASS, 124 passed, 97% combined, archive checkout PASS. `actions/checkout@v4`/`actions/setup-python@v5` worked; the `docker` job did not run. **R27 stays `in-progress`** until the owner reports a fully green run of both jobs after the push.
 
 - **Done (2026-10-19).** The owner reported that after pushing `caae3aa` **both** GitHub Actions jobs of `.github/workflows/ci.yml` ran green: the `test` job ran `scripts/ci_check.sh` (build data+model, full suite, coverage gate, zero-skip gate, README quickstart) and the `docker` job ran `scripts/docker_smoke.sh` (`docker build` of the main Dockerfile, `docker compose up -d pricing-api`, `/v1/health` → 200). The workflow runs on push and pull request to `main`, so the "runs `pytest tests/` and `docker build` on push" criterion is covered. README now documents CI status with a badge and a `## Continuous Integration` section (C7, 2026-10-19). Dead CI metadata was removed in `f66a703`. → **R27 done.** The green runs are user-reported; no Docker command was run in the authoring environment.
+
+- **Post-D31 docker run (user-reported 2026-10-19).** After the D31 changes were pushed, the docker job PASSED the main-image build, `docker compose up -d pricing-api`, `/v1/health` (200, `loaded: true`), the non-root check (uid 1000) and the Docker healthcheck (`starting` -> `healthy`). It FAILED at `mlflow /health (max 240s)`: the mlflow-server container restart-looped with `ModuleNotFoundError: No module named 'psycopg'` from `sqlalchemy/dialects/postgresql/psycopg.py` (SQLAlchemy 2.1 resolves a bare `postgresql://` to psycopg v3). Fixed in `0aeb1be` (`postgresql+psycopg2://`, guarded by `tests/test_compose_files.py::test_mlflow_backend_store_uri_names_the_psycopg2_driver`). R27's written criteria remain covered, but the docker job was red on 2026-10-19 until the fix is pushed and re-run green; README's badge shows the real status.
 
 ### R28 — Deployment scripts, or remove the claims
 - **Priority:** P2
@@ -609,7 +611,7 @@ P2 = R27–R33 (7 items). Total: 35 items.
 | R32 — Causal-inference limitation | done | `## Limitations` + `tests/test_readme_limitations.py`. |
 | R33 — `.agents/` tracking | done | `.agents/` un-ignored and committed. |
 
-**P0/P1/P2:** every item is `done`; nothing remains `todo`, `in-progress` or `blocked` in this roadmap. R27 was the last open item.
+**P0/P1/P2:** every item is `done` against its written criteria; nothing remains `todo`, `in-progress` or `blocked` in this roadmap. **P2 completion is provisional:** after the D31 extension the CI docker job was red on 2026-10-19 at the MLflow health step (driver bug, fixed in `0aeb1be`); P2 is complete once the CI run after the fix is green (user to report). R27 was the last open item.
 
 ## Post-P2 review (parked, not started)
 

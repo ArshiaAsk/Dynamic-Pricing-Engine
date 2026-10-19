@@ -15,6 +15,29 @@ Next session should start with:
 - ...
 ```
 
+## 2026-10-20 — CI docker job found the MLflow image crash; psycopg2 driver named explicitly
+
+Done:
+- **C1 `0aeb1be` — `fix(mlflow): name the psycopg2 driver in the backend store URI (D31 follow-up)`.** `Dockerfile.mlflow` (one URI) and `tests/test_compose_files.py` (+1 test). **Grep before the fix** (`git grep` outside `.agents`): `postgresql://` and `mlflow-db:5432` each matched **only** `Dockerfile.mlflow:23`; no README/script/test/compose occurrence. **Test first:** `test_mlflow_backend_store_uri_names_the_psycopg2_driver` parses the `--backend-store-uri` value from the Dockerfile CMD, asserts `urlsplit(uri).scheme == "postgresql+psycopg2"`, asserts an exact `psycopg2-binary==` pin, and checks any compose `command`/`environment` URI for the same explicit driver. **Fail-before:** `1 failed, 12 passed` — `AssertionError: backend-store-uri scheme is 'postgresql', not 'postgresql+psycopg2'`. **Pass-after:** `13 passed`. `bash -n scripts/docker_smoke.sh` → exit 0; `docker compose -f docker-compose.yml config -q` → exit 0 (config validation only). Full suite **133 → 134 passed, 0 skipped**.
+- **CI evidence (user-provided, docker job on GitHub Actions, 2026-10-19).** PASSED: build of the main `Dockerfile`; `docker compose up -d pricing-api`; the health check (200, `"loaded":true`); the non-root check (uid 1000); the Docker healthcheck (`starting` -> `healthy`). FAILED: the step `mlflow /health (max 240s)`. The `mlflow-server` container (built from `Dockerfile.mlflow`) restart-looped with `ModuleNotFoundError: No module named 'psycopg'` raised from `sqlalchemy/dialects/postgresql/psycopg.py` (`import_dbapi`) while MLflow created the tracking-store engine for `postgresql://mlflow:mlflow@mlflow-db:5432/mlflow`. The image had **sqlalchemy 2.1.5** and **psycopg2-binary 2.9.13** (the cp312 wheel installed fine). The mlflow server's health had never been verified before this run.
+- **Root cause.** With SQLAlchemy 2.1.x, the bare `postgresql://` scheme resolves to the psycopg (v3) dialect, so the installed psycopg2 driver must be named explicitly. Fix: `postgresql+psycopg2://` in the Dockerfile CMD; no versions changed.
+- **C2 (this commit) — docs.** STATE: Docker row → PARTIAL (main-image checks green; mlflow health failed, fix awaiting re-run), CI row → PARTIAL (caae3aa green; post-D31 red at mlflow health), §7 adds the transitive unpinned SQLAlchemy observation and the explicit-driver mitigation, `Last verified` → 2026-10-20 / `0aeb1be`. ROADMAP: R25 follow-up note (mlflow health now covered by the smoke script), R27 post-D31 note (criteria remain covered; job red until the fix is re-run green), P2 completion qualified. DECISIONS: D31 implementation note now records the CI result (builder/non-root/model/HEALTHCHECK verified; mlflow NOT healthy, fix `0aeb1be`, re-run pending) and the last-updated line. LOG: this entry.
+
+Left open / blocked:
+- The mlflow service is **not yet healthy in CI**. The fix is **static check only** until the user pushes and the docker job re-runs green.
+- P2 is complete **provisionally**: complete once that green run is reported.
+
+Next session should start with:
+- Read the user's next CI report. If the docker job is green, close the qualification (D31 fully verified, P2 final) and record the run. If it still fails, capture the new traceback before changing anything.
+
+Flags:
+- Docker was not run here. Every Docker claim is **static check only; verified by the CI docker job after the user pushes**.
+- SQLAlchemy 2.1.5 is user-reported from the CI image log; it is not installed/checked in this environment, and no pin was added (out of scope).
+- The test asserts the URI scheme and the psycopg2 pin, not that MLflow starts; startup remains a CI-only verification.
+- Only one live occurrence existed, so no other consumer needed updating.
+
+---
+
 ## 2026-10-19 — D31 implemented (one hardened image), R27 closed, P2 complete
 
 Done:
