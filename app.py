@@ -63,7 +63,16 @@ with tab1:
     
     with col1:
         st.subheader("📦 Product Information")
-        product_id = st.number_input("Product ID", value=1, min_value=0, step=1)
+        product_id = st.number_input(
+            "Product ID",
+            value=1,
+            min_value=0,
+            step=1,
+            help=(
+                "Accepted for request compatibility and logging only; it does "
+                "not change the recommended price."
+            ),
+        )
         competitor_price = st.number_input(
             "Competitor Price ($)",
             value=89.99,
