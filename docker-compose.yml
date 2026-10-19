@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
 
   mlflow-db:
@@ -45,10 +43,11 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - ./configs:/app/configs:ro
-      - ./data:/app/data
+      - app_logs:/app/logs
     depends_on:
       - mlflow
     restart: unless-stopped
 
 volumes:
   mlflow_db:
+  app_logs:

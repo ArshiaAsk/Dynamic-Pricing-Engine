@@ -127,6 +127,57 @@ def test_docker_compose_config_accepts_file(compose_file):
     )
 
 
+
+def _main_compose():
+    return yaml.safe_load(
+        (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    )
+
+
+def _volume_mounts(service):
+    return [str(volume) for volume in service.get("volumes", [])]
+
+
+def test_pricing_api_restarts_unless_stopped():
+    service = _main_compose()["services"]["pricing-api"]
+    assert service.get("restart") == "unless-stopped"
+
+
+def test_no_obsolete_top_level_version_key():
+    assert "version" not in _main_compose(), (
+        "the top-level 'version' key is obsolete and prints a warning"
+    )
+
+
+def test_configs_mount_is_read_only():
+    mounts = _volume_mounts(_main_compose()["services"]["pricing-api"])
+    configs = [mount for mount in mounts if mount.split(":")[1:2] == ["/app/configs"]]
+    assert configs, f"pricing-api has no /app/configs mount: {mounts}"
+    assert all(mount.endswith(":ro") for mount in configs), configs
+
+
+def test_logs_use_a_declared_named_volume():
+    doc = _main_compose()
+    mounts = _volume_mounts(doc["services"]["pricing-api"])
+    logs = [mount for mount in mounts if mount.split(":")[1:2] == ["/app/logs"]]
+    assert logs, f"pricing-api has no /app/logs mount: {mounts}"
+    for mount in logs:
+        source = mount.split(":")[0]
+        assert not source.startswith((".", "/")), (
+            f"/app/logs must be a named volume, not a host bind: {mount}"
+        )
+        assert source in doc.get("volumes", {}), (
+            f"named volume {source!r} is not declared under top-level volumes"
+        )
+
+
+def test_no_data_bind_mount_at_serve_time():
+    """STEP 0a: the serving path neither reads nor writes data/."""
+    mounts = _volume_mounts(_main_compose()["services"]["pricing-api"])
+    data = [mount for mount in mounts if mount.split(":")[1:2] == ["/app/data"]]
+    assert data == [], f"unexpected /app/data mount: {data}"
+
+
 def test_compose_mlflow_service_pin_matches_requirements():
     """D27 point 7: the mlflow service pins the same mlflow== as requirements.txt."""
     compose = yaml.safe_load(
