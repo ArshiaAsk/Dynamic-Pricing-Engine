@@ -178,20 +178,54 @@ def test_no_data_bind_mount_at_serve_time():
     assert data == [], f"unexpected /app/data mount: {data}"
 
 
-def test_compose_mlflow_service_pin_matches_requirements():
-    """D27 point 7: the mlflow service pins the same mlflow== as requirements.txt."""
-    compose = yaml.safe_load(
-        (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    )
-    command = compose["services"]["mlflow"]["command"]
-    compose_match = re.search(r"mlflow==([^\s\"'&]+)", command)
-    assert compose_match, f"mlflow service command does not pin mlflow==X: {command!r}"
+MLFLOW_DOCKERFILE = REPO_ROOT / "Dockerfile.mlflow"
 
+
+def _pinned_version(text, package):
+    match = re.search(rf"\b{re.escape(package)}==([^\s\\\"'&]+)", text)
+    return match.group(1) if match else None
+
+
+def test_mlflow_image_pins_match_requirements():
+    """D31/D27: the pinned mlflow image matches requirements.txt."""
+    image_text = MLFLOW_DOCKERFILE.read_text(encoding="utf-8")
     req_text = (REPO_ROOT / "requirements.txt").read_text(encoding="utf-8")
-    req_match = re.search(r"^mlflow==([^\s#]+)", req_text, re.MULTILINE)
-    assert req_match, "requirements.txt has no mlflow== pin"
 
-    assert compose_match.group(1) == req_match.group(1), (
-        f"compose mlflow=={compose_match.group(1)} "
-        f"!= requirements mlflow=={req_match.group(1)}"
+    for package in ("mlflow", "protobuf"):
+        image_pin = _pinned_version(image_text, package)
+        req_pin = _pinned_version(req_text, package)
+        assert image_pin, f"{MLFLOW_DOCKERFILE.name} does not pin {package}==X"
+        assert req_pin, f"requirements.txt has no {package}== pin"
+        assert image_pin == req_pin, (
+            f"image {package}=={image_pin} != requirements {package}=={req_pin}"
+        )
+
+    assert _pinned_version(image_text, "psycopg2-binary") == "2.9.13"
+
+
+def test_mlflow_service_uses_the_pinned_image_not_pip_at_start():
+    service = _main_compose()["services"]["mlflow"]
+    build = service.get("build")
+    assert isinstance(build, dict), f"mlflow service has no build mapping: {build!r}"
+    assert build.get("dockerfile") == "Dockerfile.mlflow", build
+    command = service.get("command", "")
+    assert "pip install" not in command, (
+        f"mlflow service still installs at start: {command!r}"
     )
+
+
+def test_mlflow_image_runs_non_root_and_has_a_healthcheck():
+    text = MLFLOW_DOCKERFILE.read_text(encoding="utf-8")
+    users = [
+        line.split(None, 1)[1].strip().lower()
+        for line in text.splitlines()
+        if line.strip().upper().startswith("USER ")
+    ]
+    assert users, "Dockerfile.mlflow has no USER instruction"
+    assert users[-1] not in {"root", "0", "root:root", "0:0"}, users
+    healthchecks = [
+        line for line in text.splitlines()
+        if line.strip().upper().startswith("HEALTHCHECK ")
+    ]
+    assert healthchecks, "Dockerfile.mlflow has no HEALTHCHECK"
+    assert ":5000/health" in text, "HEALTHCHECK does not probe :5000/health"

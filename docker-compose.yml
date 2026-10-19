@@ -12,18 +12,15 @@ services:
     restart: unless-stopped
 
   mlflow:
-    image: python:3.10
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    image: dynamic-pricing-mlflow:latest
     container_name: mlflow-server
     working_dir: /mlflow
     volumes:
       - ./mlflow:/mlflow
-    command: >
-      bash -c "pip install mlflow==3.17.1 psycopg2-binary &&
-      mlflow server
-      --backend-store-uri postgresql://mlflow:mlflow@mlflow-db:5432/mlflow
-      --default-artifact-root /mlflow/artifacts
-      --host 0.0.0.0
-      --port 5000"
+      - mlflow_artifacts:/mlflow/artifacts
     ports:
       - "5000:5000"
     depends_on:
@@ -50,4 +47,5 @@ services:
 
 volumes:
   mlflow_db:
+  mlflow_artifacts:
   app_logs:
