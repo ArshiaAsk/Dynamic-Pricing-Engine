@@ -12,11 +12,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCKERFILE = REPO_ROOT / "Dockerfile"
 
 
+def _is_source_copy(line):
+    """True for ``COPY . .`` and flag variants (e.g. ``COPY --chown=a:a . .``)."""
+    parts = line.split()
+    if not parts or parts[0].upper() != "COPY":
+        return False
+    return [part for part in parts[1:] if not part.startswith("--")] == [".", "."]
+
+
 def _run_lines_after_copy():
     """The RUN lines that appear after the ``COPY . .`` line."""
     lines = DOCKERFILE.read_text(encoding="utf-8").splitlines()
     copy_idx = next(
-        i for i, line in enumerate(lines) if line.strip() == "COPY . ."
+        i for i, line in enumerate(lines) if _is_source_copy(line)
     )
     return [
         line for line in lines[copy_idx + 1:]
