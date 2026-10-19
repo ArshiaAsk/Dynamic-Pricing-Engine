@@ -210,6 +210,35 @@ CI enforces at least 80% line coverage for every file under `src/pricing/` and
 
 ---
 
+## Continuous Integration
+
+[![CI](https://github.com/ArshiaAsk/Dynamic-Pricing-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/ArshiaAsk/Dynamic-Pricing-Engine/actions/workflows/ci.yml)
+
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on pushes and pull
+requests to `main` and has two jobs:
+
+- **test** — installs `requirements.txt`, builds the synthetic data and model,
+  runs the full pytest suite with coverage, enforces at least 80% line coverage
+  for every file under `src/pricing/` and `src/api/` (plus the 80% combined
+  floor), fails on any skipped test, and verifies the README quickstart.
+- **docker** — builds the image, starts the stack with `docker compose up -d`,
+  and checks the API health response, that the process runs as a non-root user,
+  the Docker healthcheck, and the MLflow server health.
+
+Local equivalents:
+
+```bash
+# The test job
+bash scripts/ci_check.sh
+
+# The docker job (requires Docker)
+bash scripts/docker_smoke.sh
+```
+
+The most recent runs of both jobs were green (user-reported).
+
+---
+
 ## Docker Deployment
 
 ### Docker Compose

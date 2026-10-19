@@ -151,3 +151,10 @@ def test_readme_has_no_removed_claims():
         if _find_phrase(text_lower, phrase):
             offenders.append(f"{phrase!r} ({reason})")
     assert offenders == [], "README contains removed/false claims: " + "; ".join(offenders)
+
+
+def test_readme_documents_ci():
+    """R27: the CI status and the local equivalents are documented."""
+    text = README.read_text(encoding="utf-8")
+    assert ".github/workflows/ci.yml" in text, "README does not mention the CI workflow"
+    assert "scripts/ci_check.sh" in text, "README does not mention the local test job"
