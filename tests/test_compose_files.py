@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -229,3 +230,64 @@ def test_mlflow_image_runs_non_root_and_has_a_healthcheck():
     ]
     assert healthchecks, "Dockerfile.mlflow has no HEALTHCHECK"
     assert ":5000/health" in text, "HEALTHCHECK does not probe :5000/health"
+
+
+def _compose_backend_store_uris(service):
+    """Every backend-store URI the compose service supplies, if any."""
+    uris = []
+
+    command = service.get("command")
+    if isinstance(command, str):
+        uris.extend(
+            match.strip("\"'")
+            for match in re.findall(r"--backend-store-uri[=\s]+(\S+)", command)
+        )
+    elif isinstance(command, list):
+        for index, token in enumerate(command):
+            if token == "--backend-store-uri" and index + 1 < len(command):
+                uris.append(command[index + 1])
+
+    environment = service.get("environment", {})
+    if isinstance(environment, dict):
+        items = environment.items()
+    else:
+        items = [
+            entry.split("=", 1) for entry in environment if "=" in str(entry)
+        ]
+    for key, value in items:
+        if key in {"MLFLOW_BACKEND_STORE_URI", "BACKEND_STORE_URI"}:
+            uris.append(str(value))
+
+    return uris
+
+
+def test_mlflow_backend_store_uri_names_the_psycopg2_driver():
+    """SQLAlchemy 2.1 resolves ``postgresql://`` to the psycopg (v3) dialect.
+
+    The CI docker job (2026-10-19) crashed the mlflow-server container with
+    ``ModuleNotFoundError: No module named 'psycopg'`` from
+    ``sqlalchemy/dialects/postgresql/psycopg.py`` while creating the engine for
+    ``postgresql://...``. The image installs psycopg2, so the URI must name that
+    driver explicitly (``postgresql+psycopg2://``).
+    """
+    text = MLFLOW_DOCKERFILE.read_text(encoding="utf-8")
+    match = re.search(r'"--backend-store-uri",\s*"([^"]+)"', text)
+    assert match, "Dockerfile.mlflow CMD has no --backend-store-uri value"
+
+    uri = match.group(1)
+    scheme = urlsplit(uri).scheme
+    assert scheme == "postgresql+psycopg2", (
+        f"backend-store-uri scheme is {scheme!r}, not 'postgresql+psycopg2': {uri}"
+    )
+
+    psycopg2_pin = _pinned_version(text, "psycopg2-binary")
+    assert psycopg2_pin, "Dockerfile.mlflow does not pin psycopg2-binary==X"
+    assert re.fullmatch(r"\d+(\.\d+)+", psycopg2_pin), (
+        f"psycopg2-binary pin is not an exact version: {psycopg2_pin!r}"
+    )
+
+    compose_uris = _compose_backend_store_uris(_main_compose()["services"]["mlflow"])
+    for compose_uri in compose_uris:
+        assert urlsplit(compose_uri).scheme == "postgresql+psycopg2", (
+            f"compose backend-store-uri does not name the driver: {compose_uri}"
+        )
