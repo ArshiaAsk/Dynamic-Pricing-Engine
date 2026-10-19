@@ -1,8 +1,10 @@
 """D27 point 6: ``scripts/promote_model.py`` defaults to a sqlite tracking store.
 
-The default must be a sqlite URI (the ``mlflow.db`` that ``start.sh``'s MLflow
-server uses), not a ``file://`` URI: mlflow 3.x refuses the filesystem backend
-unless ``MLFLOW_ALLOW_FILE_STORE`` is set, which this repo does not set.
+The default must be a sqlite URI (the repo-local ``mlflow.db``), not a
+``file://`` URI: mlflow 3.x refuses the filesystem backend unless
+``MLFLOW_ALLOW_FILE_STORE`` is set, which this repo does not set. The
+docker-compose ``mlflow`` service uses a Postgres backend; this sqlite default
+is the local registry used when ``MLFLOW_TRACKING_URI`` is unset.
 """
 import pytest
 
