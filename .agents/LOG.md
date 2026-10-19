@@ -15,6 +15,36 @@ Next session should start with:
 - ...
 ```
 
+## 2026-10-19 — D31 implemented (one hardened image), R27 closed, P2 complete
+
+Done:
+- **C0 `3d7d49b` — `docs(agents): accept D31 (one hardened container image)`.** `.agents/DECISIONS.md` only. D31 → `accepted` (owner accepted 2026-10-18); header accepted list and last-updated line updated; implementation note added.
+- **C1 `1d45e8e` — `build(docker): harden the main image — builder stage, non-root user, HEALTHCHECK (D31)`.** `Dockerfile`, `tests/test_dockerfile_hardening.py` (new, 5 tests), `tests/test_dockerfile_model_build.py` (accept `COPY` flags). **Fail-before:** `4 failed, 2 passed` (one stage; no `USER`; no `HEALTHCHECK`; final stage has `pip install`). **Pass-after:** `14 passed` (the two Dockerfile files + `tests/test_ci_workflow.py`). Final suite **125 passed**.
+- **C2 `39fc31e` — `build(compose): restart policy, read-only configs, named logs volume, drop obsolete version key (D31)`.** `docker-compose.yml`, `tests/test_compose_files.py` (+6 tests). **Fail-before:** `3 failed, 9 passed` (top-level `version`, no `app_logs` volume, `./data` mount); `restart` and `:ro` already existed (flagged). **Pass-after:** `12 passed`; `docker compose -f docker-compose.yml config -q` → exit 0. Suite **130 passed**.
+- **C3 `06f62f3` — `build(mlflow): pinned Dockerfile.mlflow replaces pip-install-at-start (D27/R25 follow-up)`.** New `Dockerfile.mlflow`; compose `mlflow` uses `build: {context: ., dockerfile: Dockerfile.mlflow}`, no `pip install` command, non-root `mlflow`, `/mlflow/artifacts` named volume; tests compare the mlflow/protobuf pins with `requirements.txt` and assert `psycopg2-binary==2.9.13`. **Fail-before:** `3 failed` (`FileNotFoundError: Dockerfile.mlflow`; service still uses `python:3.10` + pip command). **Pass-after:** `14 passed`; `docker compose config -q` → exit 0. Suite **132 passed**.
+- **C4 `1b09d21` — `chore: delete Dockerfile.prod and docker-compose.prod.yml; update README (D31)`.** Deleted both files; README now documents one `docker compose up -d` path and "container image runs as a non-root user and has a healthcheck"; `tests/test_readme_truth.py` forbids `Dockerfile.prod` / `docker-compose.prod`. Discovery check: `['docker-compose.yml']`. No test was specific to the deleted files (the glob parametrization simply drops 2 cases). Suite **130 passed**.
+- **C5 `4496ca7` — `ci(docker): smoke script verifies non-root, Docker healthcheck and the mlflow server (D31)`.** `scripts/docker_smoke.sh` adds `id -u` != 0, a bounded wait for `State.Health.Status == healthy`, a bounded wait for `:5000/health`, and prints `docker compose logs --tail=80 <service>` on failure; the `down -v` trap is unchanged. Static test added to `tests/test_ci_workflow.py`. **Fail-before:** `1 failed` (`missing 'id -u'`). **Pass-after:** `9 passed`; `bash -n` exit 0. Suite **131 passed**. The script was **not executed** (Docker forbidden).
+- **C6 `71b5054` — `feat(ui): explain that Product ID does not influence the recommendation (D20, R34 follow-up)`.** `app.py` `help=` text; new `tests/test_product_id_help.py` parses the AST. **Fail-before:** `1 failed` ("no help= text"). **Pass-after:** `6 passed` with `tests/test_streamlit_contract.py`. Suite **132 passed**.
+- **C7 `2f890a0` — `docs(readme): document CI with a status badge (R27)`.** New `## Continuous Integration` section (badge, both jobs, local equivalents); `tests/test_readme_truth.py` gains `test_readme_documents_ci`. **Fail-before:** `1 failed` ("README does not mention the CI workflow"). **Pass-after:** `10 passed` across the four README tests. Suite **133 passed**. Commit body states the green runs were user-reported.
+- **C8 `71a599a` — `docs: refresh stale start.sh mentions in two docstrings`.** `scripts/promote_model.py` and `tests/test_promote_default_uri.py` only. The sqlite default is kept factual: the compose `mlflow` service uses Postgres, so the docstrings now say the sqlite store is the local registry used when `MLFLOW_TRACKING_URI` is unset. Suite **133 passed**.
+- **C9 (this commit) — docs.** ROADMAP: **R27 → done**; R25 follow-ups closed; R28 prod/HF follow-up resolved by D31; P2 status table (R27-R33 all done); new **Post-P2 review (parked, not started)** section. STATE: Docker row CONFIRMED (one image, non-root, healthcheck, restart, pinned mlflow image), CI row green (user-reported), tests **133**, `Enterprise security`/`Resource limits` rows updated, §7 prod finding resolved, `Last verified`. DECISIONS: D31 implementation commits C1-C5 + user-reported CI evidence. LOG: this entry.
+- **STEP 0a (read-only):** the serving path writes `logs/` (`setup_logging_from_env`, default `LOG_DIR=logs`) and `logs/predictions/` (`PredictionLogger`, `mkdir` + append); it reads `models/demand_model.pkl`, `models/features.json` and `configs/config.yaml`. Nothing on the serving path reads or writes `data/`, so the `./data` bind mount was removed in C2.
+- **User evidence (recorded, user-reported):** after pushing `caae3aa`, **both** GitHub Actions jobs (`test`, `docker`) of `.github/workflows/ci.yml` ran green; the docker job ran `scripts/docker_smoke.sh` (build the main Dockerfile, `docker compose up -d pricing-api`, `/v1/health` 200).
+
+Left open / blocked:
+- Nothing in P0/P1/P2. The post-P2 review is parked pending the user's go-ahead.
+- Every Docker claim in this batch is **static check only**; the updated `docker` job verifies it after the user pushes.
+
+Next session should start with:
+- Await the user's push and the CI `docker` job result for this batch; if it fails, fix the image (the Dockerfile is the only unexecuted artifact).
+- Ask whether to start the parked post-P2 review.
+
+Flags:
+- `docker-compose.yml` already had `restart: unless-stopped` and `./configs:/app/configs:ro` before C2; only the `version` key, the `app_logs` volume and the `./data` mount were actually changed.
+- `psycopg2-binary==2.9.13` availability for cp312 could not be checked offline (no install allowed).
+- The compose `mlflow` service keeps the existing `./mlflow:/mlflow` bind and adds a named `mlflow_artifacts` volume at `/mlflow/artifacts` so the non-root user has a writable artifact directory.
+- No Docker build/up was run; `docker compose config -q` was the only Docker command used.
+
 ---
 
 ## 2026-10-18 — CI archive-checkout failure fixed, HF deployment removed, R29 closed; D31 proposed

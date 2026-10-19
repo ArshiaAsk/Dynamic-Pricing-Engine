@@ -472,6 +472,7 @@ P2 = R27–R33 (7 items). Total: 35 items.
   - The obsolete `version: "3.8"` key is still present in both compose files (`docker-compose.yml:1`, `docker-compose.prod.yml:1`).
   - `MONITORING_ENABLED=true` in `docker-compose.prod.yml:17` has **no reader** (unread since R19).
   - `Dockerfile.prod`, `Dockerfile.hf`, and `docker-compose.prod.yml`'s `./models:/app/models:ro` mount still ship **no model** on a fresh clone (only the main `Dockerfile` builds one — D30). Recorded under **R28** (deployment files), below.
+  - **All follow-ups closed (2026-10-19, D31):** `Dockerfile.mlflow` pins `mlflow==3.17.1`, `protobuf==4.25.9` and `psycopg2-binary==2.9.13` on `python:3.12-slim`, and the compose `mlflow` service no longer runs `pip install` at start; the obsolete `version` key is removed from `docker-compose.yml`; `MONITORING_ENABLED` is gone with `docker-compose.prod.yml`; `python:3.10` is resolved because the MLflow image is now `python:3.12-slim` (the same base as the API and CI).
 
 ### R26 — Bounded startup in `start.sh`
 - **Priority:** P1
@@ -523,7 +524,7 @@ P2 = R27–R33 (7 items). Total: 35 items.
 
 ### R27 — CI workflow (or remove CI claims)
 - **Priority:** P2
-- **Status:** in-progress
+- **Status:** done
 - **Files touched:** `.github/workflows/ci.yml` (new), `README.md`
 - **Acceptance criteria:** On push, the workflow runs `pytest tests/` (green per R8) and `docker build`, and its status is documented in README. **OR** all CI/CD claims are removed from README. Dead CI metadata in `scripts/train_with_tuning.py:28-35` is removed or actually exercised.
 - **Depends on:** R8, R25
@@ -533,6 +534,8 @@ P2 = R27–R33 (7 items). Total: 35 items.
 - **Evidence (2026-10-17, D18 accepted `f355212`; code `9164438`, `f66a703`, `3723295`, `dc879c1`, `792627f`):** `.github/workflows/ci.yml` defines the `test` job (checkout → setup-python `3.12` with pip cache → `pip install -r requirements.txt` → `bash scripts/ci_check.sh`) and the `docker` job (`needs: test` → `bash scripts/docker_smoke.sh`), with `permissions: contents: read`, a concurrency group that cancels older runs of the same ref, timeouts 20/30 min, and no error suppression. `scripts/ci_check.sh` builds data+model, runs `pytest tests -q -rs --cov=src/pricing --cov=src/api --cov-report=term-missing --cov-report=json:… --junitxml=… --cov-fail-under=80`, runs `scripts/check_coverage.py` (per-file ≥80%), the zero-skip gate (JUnit; `ALLOW_SKIPS=1` for local debugging only) and `scripts/verify_readme.sh`. `tests/test_ci_workflow.py` (8 static tests) parses the YAML (handling PyYAML's `on:`→`True`), asserts triggers/jobs/`needs`/timeouts, `python-version '3.12'` == the Dockerfile base, the scripts exist + are executable + pass `bash -n`, no `continue-on-error`/`|| true`, read-only permissions, and that `.github` is not gitignored; it was **shown failing before the files existed** (7 errors) and passes after (8 passed). **Local evidence:** `PYTHON=.venv/bin/python bash scripts/ci_check.sh` → exit 0, all PASS, **124 passed, 0 skipped (124 collected)**, 97% combined, per-file gate all PASS; the same run in `/tmp/ci_prep_clone` **without artifacts** (the script builds them) → exit 0, 124 passed, 0 skipped, identical per-file numbers. Gate mutations in `/tmp` copies: `THRESHOLD=99` → `check_coverage.py` exits 1; one added skipped test → the zero-skip gate fails. Dead CI metadata (`get_ci_metadata` / `GITHUB_*` tags) removed from `scripts/train_with_tuning.py` (`f66a703`). **Why not `done`:** the criterion also requires the workflow to run on push and its status to be documented in README; neither has happened — README deliberately makes no CI-status claim until the owner pushes and reports a green run. **Remaining acceptance = the owner pushes and reports a green run of both jobs (`test`, `docker`); README then documents the CI status.** The action versions (`actions/checkout@v4`, `actions/setup-python@v5`) are from memory and were not verified offline; `scripts/docker_smoke.sh` was `bash -n`-checked only (no Docker in this environment).
 
 - **Note (2026-10-18) — first GitHub run and fix.** The first `test` job run (2026-10-17, user-reported; Python 3.12.15, pytest 9.1.1, pytest-cov 7.1.0) passed build data+model, 124 tests, coverage 97.17%, the per-file gate (9 files) and the zero-skip gate, then failed in `scripts/verify_readme.sh`: inside its `git archive HEAD` checkout (no `.git`) `tests/test_ci_workflow.py::test_workflow_file_is_not_gitignored` ran `git check-ignore` → exit 128. Fixed in `caae3aa` by parsing `.gitignore` in pure Python (verified in the repo and in a `/tmp` archive export; mutation: appending `.github/` to a copy's `.gitignore` makes it fail, removing it passes). `bash scripts/ci_check.sh` at `caae3aa` → exit 0, all PASS, 124 passed, 97% combined, archive checkout PASS. `actions/checkout@v4`/`actions/setup-python@v5` worked; the `docker` job did not run. **R27 stays `in-progress`** until the owner reports a fully green run of both jobs after the push.
+
+- **Done (2026-10-19).** The owner reported that after pushing `caae3aa` **both** GitHub Actions jobs of `.github/workflows/ci.yml` ran green: the `test` job ran `scripts/ci_check.sh` (build data+model, full suite, coverage gate, zero-skip gate, README quickstart) and the `docker` job ran `scripts/docker_smoke.sh` (`docker build` of the main Dockerfile, `docker compose up -d pricing-api`, `/v1/health` → 200). The workflow runs on push and pull request to `main`, so the "runs `pytest tests/` and `docker build` on push" criterion is covered. README now documents CI status with a badge and a `## Continuous Integration` section (C7, 2026-10-19). Dead CI metadata was removed in `f66a703`. → **R27 done.** The green runs are user-reported; no Docker command was run in the authoring environment.
 
 ### R28 — Deployment scripts, or remove the claims
 - **Priority:** P2
@@ -546,6 +549,8 @@ P2 = R27–R33 (7 items). Total: 35 items.
 - **Evidence (2026-10-17, remove-the-references branch; D19 accepted `f355212`):** the AWS deployment branch is closed by removal, not by writing `scripts/deploy.sh`/`scripts/pre_deploy_check.sh` (neither exists; `tests/test_readme_truth.py` forbids the phrases `deploy.sh`, `pre_deploy_check`, `deploy to aws`, `aws` and `ec2`). The README AWS/EC2 sections were deleted in R23 (`f26dee3`) and the residual `DEPLOYMENT.md`/AWS Documentation-table line in R31 (`0b57fc4`); `grep -in 'aws\|ec2' README.md` → no matches. `tests/test_readme_links.py` resolves every relative link, and `tests/test_verify_readme_script.py` keeps the remaining commands executable. **What remains in README is the Docker path** ("Docker Deployment", "Deployment & Operations", `# Deploy new model`) — real, tested behaviour (R25/D30), not an AWS/cloud or deploy-script claim. **Acceptance criteria coverage:** (1) scripts exist + idempotent + `pre_deploy_check.sh` exit codes — **not chosen** (the OR branch); (2) "the AWS/deploy references in README are removed" — **chosen and covered** as above. → **R28 `done`.** **Carried open finding (not an R28 criterion):** `Dockerfile.prod`, `Dockerfile.hf` and the `./models` mounts of `docker-compose.prod.yml`/`docker-compose.hf.yml` still ship no model on a fresh clone — the engine raises `FileNotFoundError` at import and the container exits. Planned fix (D30 follow-up): the same data+model build step plus removing those mounts, verified by building those images in CI in the next batch.
 
 - **Note (2026-10-17) — HF half removed.** `Dockerfile.hf`, `docker-compose.hf.yml`, `start.sh`, and `tests/test_start_sh.py` are deleted (C2 `5aa5d58`). The remaining no-model deploy path is `Dockerfile.prod` + `docker-compose.prod.yml` (proposed D31).
+
+- **Note (2026-10-19) — prod/HF follow-up resolved (D31).** `Dockerfile.prod` and `docker-compose.prod.yml` are deleted (C4); the HF files were deleted earlier (`5aa5d58`). The one remaining image is the main `Dockerfile`, which builds data+model, runs non-root and has a `HEALTHCHECK`. No deployment image ships without a model. This is a carried finding, not an R28 acceptance criterion; R28 remains `done` through its remove-the-references branch.
 
 ### R29 — SQLite: use it or remove it
 - **Priority:** P2
@@ -591,6 +596,34 @@ P2 = R27–R33 (7 items). Total: 35 items.
 - **Acceptance criteria:** Either `.gitignore` no longer ignores `.agents/` and both files are committed, **or** the ignore is kept and explicitly documented as intentional. `git status` is unambiguous about the decision.
 - **Evidence:** 2026-09-28 — the `.agents` entry was removed from `.gitignore`; `git check-ignore .agents/STATE.md` returns nothing; `.agents/` and `AGENTS.md` are committed. (Note: the owner's edit had *added* `.agents` to `.gitignore` rather than removing it; corrected here.)
 - **Depends on:** none
+
+### P2 status (2026-10-19)
+
+| Item | Final status | Evidence |
+|---|---|---|
+| R27 — CI workflow | done | Both jobs green after pushing `caae3aa` (user-reported); README CI section + badge (C7); dead metadata removed (`f66a703`). |
+| R28 — Deployment scripts or remove claims | done | Remove-the-references branch; the prod/HF no-model follow-up is resolved by D31 and `5aa5d58`. |
+| R29 — SQLite use or remove | done | `data.db` deleted by the owner; no consumer remains; README/scripts gone. |
+| R30 — Coverage on pricing/serving | done | Every file under `src/pricing` and `src/api` ≥ 80%; number in README; CI per-file gate. |
+| R31 — Every documentation link resolves | done | `tests/test_readme_links.py`; missing docs links removed. |
+| R32 — Causal-inference limitation | done | `## Limitations` + `tests/test_readme_limitations.py`. |
+| R33 — `.agents/` tracking | done | `.agents/` un-ignored and committed. |
+
+**P0/P1/P2:** every item is `done`; nothing remains `todo`, `in-progress` or `blocked` in this roadmap. R27 was the last open item.
+
+## Post-P2 review (parked, not started)
+
+Waiting for the user's go-ahead; no item below is scheduled or implemented.
+
+- ML: compute the noise ceiling of the synthetic generator (oracle R²) to put R²/MAPE in context.
+- ML: compare XGBoost against a log-log elasticity baseline.
+- ML: consider a monotonic constraint on price.
+- ML: evaluate pricing decisions by regret against the generator's true optimum.
+- ML: add a small ablation table (features removed).
+- Product: define the user, the decision, the success metric (revenue uplift vs a baseline policy) and guardrails (max price change).
+- Product: explanations of a recommendation.
+- Product: an experiment / A-B plan.
+- Optional: replace synthetic data with a public retail dataset that has real price variation.
 
 ---
 
