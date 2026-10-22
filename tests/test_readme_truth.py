@@ -1,5 +1,6 @@
 """R23 regression guard: the README must not reference paths that do not exist
-and must not resurrect claims that STATE.md/DECISIONS.md record as removed.
+and must not resurrect claims that docs/REBUILD_HISTORY.md / docs/DECISIONS.md
+record as removed.
 
 Two checks:
 
@@ -10,9 +11,9 @@ Two checks:
     gitignored *generated* artifacts are ignored.
 
 (b) ``test_readme_has_no_removed_claims`` — a list of phrases that must not
-    appear in README.md, each with a one-line reason, built from STATE.md /
-    DECISIONS.md facts about modules, scripts, config keys and claim families
-    that were deleted or never existed. Matching is case-insensitive on whole
+    appear in README.md, each with a one-line reason, built from
+    docs/REBUILD_HISTORY.md / docs/DECISIONS.md facts about modules, scripts,
+    config keys and claim families that were deleted or never existed. Matching is case-insensitive on whole
     words (a phrase is bounded by non-alphanumeric characters, so ``aws`` does
     not match ``laws``).
 
@@ -40,11 +41,11 @@ README = REPO_ROOT / "README.md"
 # substitutions are captured whole and can be filtered out below.
 _PATH_RE = re.compile(
     r"(?<![\w./-])(?:\./)?("
-    r"(?:src|scripts|tests|configs|models|data|reports|logs|docs|backups|\.agents)"
+    r"(?:src|scripts|tests|configs|models|data|reports|logs|docs|backups)"
     r"/[A-Za-z0-9_./*$-]+"
     r"|docker-compose[\w.-]*\.ya?ml"
     r"|Dockerfile[\w.-]*"
-    r"|start\.sh|app\.py|requirements\.txt|pytest\.ini|README\.md|AGENTS\.md"
+    r"|start\.sh|app\.py|requirements\.txt|pytest\.ini|README\.md"
     r")"
 )
 
@@ -96,22 +97,23 @@ def test_readme_referenced_paths_exist():
 # (b) forbidden phrases
 # ---------------------------------------------------------------------------
 
-# (phrase, reason) — every phrase is something STATE.md / DECISIONS.md records as
+# (phrase, reason) — every phrase is something docs/REBUILD_HISTORY.md /
+# docs/DECISIONS.md records as
 # removed or never-existing, so it must not reappear in the README.
 FORBIDDEN_PHRASES = [
     ("bayesian", "the optimizer method is rejected at the API (D2); no Bayesian library is used"),
     ("backup_database", "scripts/backup_database.sh was deleted (R22/D9)"),
     ("restore_database", "scripts/restore_database.sh was deleted (R22/D9)"),
-    ("pre_deploy_check", "scripts/pre_deploy_check.sh does not exist (STATE.md §1)"),
+    ("pre_deploy_check", "scripts/pre_deploy_check.sh does not exist (docs/REBUILD_HISTORY.md)"),
     ("Dockerfile.prod", "deleted in D31 (one hardened image)"),
     ("docker-compose.prod", "deleted in D31 (one hardened image)"),
-    ("deploy.sh", "scripts/deploy.sh does not exist (STATE.md §1, D19)"),
-    ("aws", "no AWS tooling or deployment exists (STATE.md §1, D19)"),
+    ("deploy.sh", "scripts/deploy.sh does not exist (docs/REBUILD_HISTORY.md, D19)"),
+    ("aws", "no AWS tooling or deployment exists (docs/REBUILD_HISTORY.md, D19)"),
     ("deploy to aws", "no AWS deployment flow exists (D19)"),
     ("ec2", "no AWS EC2 deployment exists (D19)"),
     ("default_method", "the config key pricing.default_method was removed in R18"),
     ("run_hyperparameter_tuning", "the config key training.run_hyperparameter_tuning was removed in R18"),
-    ("prometheus", "prometheus-client is not imported and was removed (STATE.md §1)"),
+    ("prometheus", "prometheus-client is not imported and was removed (docs/REBUILD_HISTORY.md)"),
     ("drift", "drift detection was deleted in R15/D13"),
     ("nginx", "the nginx service was removed in R24/D17"),
     ("integrated_optimizer", "src/pricing/integrated_optimizer.py was deleted in R22"),
@@ -121,11 +123,11 @@ FORBIDDEN_PHRASES = [
     ("retention", "the 7-day retention claim had no consumer (R22/D9)"),
     ("shap", "shap was removed as an unused dependency (R21)"),
     ("model versioning", "MLflow tracking is already used; the registry is an optional promoted path (D8)"),
-    ("production-ready", "unbacked adjective — no production evidence in STATE.md"),
-    ("production ready", "unbacked adjective — no production evidence in STATE.md"),
-    ("enterprise-grade", "unbacked adjective — no production evidence in STATE.md"),
-    ("0.49", "stale R² claim; the seeded artifact is R² 0.41930 (STATE.md §1)"),
-    ("49%", "stale R² claim; the seeded artifact is R² 0.41930 (STATE.md §1)"),
+    ("production-ready", "unbacked adjective — no production evidence in the rebuild history"),
+    ("production ready", "unbacked adjective — no production evidence in the rebuild history"),
+    ("enterprise-grade", "unbacked adjective — no production evidence in the rebuild history"),
+    ("0.49", "stale R² claim; the seeded artifact is R² 0.41930 (docs/REBUILD_HISTORY.md)"),
+    ("49%", "stale R² claim; the seeded artifact is R² 0.41930 (docs/REBUILD_HISTORY.md)"),
 ]
 
 

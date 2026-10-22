@@ -3,7 +3,7 @@
 The Streamlit UI reads fields out of the ``POST /v1/optimize-price`` JSON
 response. Historically it read ``predicted_demand`` while the API returns
 ``expected_demand``, so the Quick tab raised ``KeyError`` and swallowed it
-(STATE.md §5.7). Nothing caught that, because no test compared the fields the UI
+(docs/REBUILD_HISTORY.md). Nothing caught that, because no test compared the fields the UI
 reads against the API response schema (CONVENTIONS rule 29).
 
 This test parses ``app.py`` as source (importing it would execute the Streamlit
