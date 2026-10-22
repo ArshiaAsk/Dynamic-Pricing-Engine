@@ -82,9 +82,11 @@ The enforcement tag says how the rule is checked today:
 
 ### Documentation versus code
 
-20. Every command in `README.md` must be executed by `scripts/verify_readme.sh` (run in
-    CI). If it does not run on a clean checkout, it cannot be in the README. — **enforced
-    (test/script)** by `tests/test_verify_readme_script.py` and the CI test job.
+20. Every command in the README's local quickstart must be executed by
+    `scripts/verify_readme.sh` (run in CI). Docker, Streamlit and load-test commands are
+    documented separately and are not part of that script. If a quickstart command does
+    not run on a clean checkout, it cannot be in the README. — **enforced (test/script)**
+    by `tests/test_verify_readme_script.py` and the CI test job.
 21. Every relative link in `README.md` and `docs/` must resolve to an existing file. Do not
     link planned documents. — **enforced (test/script)** by `tests/test_readme_links.py` and
     `tests/test_docs.py`.

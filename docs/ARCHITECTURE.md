@@ -88,7 +88,7 @@ Inventory is finite and restocked when it falls below 20.
 - calendar: `dow`, `is_weekend`, `week`, `month`, `sin_annual`, `cos_annual`;
 - price: `price`, `competitor_price`, `price_ratio`, `price_diff_pct`,
   `price_advantage`, `log_price`, `log_comp_price`;
-- lags: units and price at 1, 7 and 14 days;
+- lags: units at 1, 7 and 14 days (price lags feed the price-change features);
 - price changes: `price_change_1d`, `price_change_7d`;
 - rolling windows 7, 14 and 28: mean and standard deviation of units, mean price;
 - interactions: `price_ratio_sin`, `price_ratio_cos`, `price_advantage_sin`.

@@ -28,9 +28,10 @@ python scripts/regenerate_data.py
 python -m src.training.train
 ```
 
-The commands must be run in module form (`python -m ...`). Running
-`python src/training/train.py` fails with `ModuleNotFoundError: No module named 'src'`
-because the repository root is not on `sys.path`; see Troubleshooting.
+The training command must be run in module form (`python -m ...`); the data
+script inserts the repository root itself. Running `python src/training/train.py`
+fails with `ModuleNotFoundError: No module named 'src'` because the repository
+root is not on `sys.path`; see Troubleshooting.
 
 The dataset size and seed are in `configs/config.yaml` under `data`
 (`n_products: 50`, `days: 365`, `seed: 42`). The seed-42 run produces R² 0.4193,
@@ -210,8 +211,7 @@ and serves `models/demand_model.pkl`. `/v1/health` reports
 ## Environment variables
 
 These are the variables read by the application and the tuning script. The defaults are
-the code defaults; `.env.example` ships the values shown in the last column when they
-differ.
+the code defaults; where `.env.example` ships a different value, the Default cell says so.
 
 | Name | Default | Effect | Read by |
 |---|---|---|---|
@@ -220,7 +220,7 @@ differ.
 | `API_WORKERS` | `1` (example ships 4) | Uvicorn worker count for the module form. | `src/api/server.py` |
 | `API_RELOAD` | `false` | Auto-reload for the module form. | `src/api/server.py` |
 | `CORS_ENABLED` | `true` | Install CORS middleware. | `src/api/server.py` |
-| `CORS_ORIGINS` | `*` | Comma-separated allowed origins. | `src/api/server.py` |
+| `CORS_ORIGINS` | `*` (example ships two origins) | Comma-separated allowed origins. | `src/api/server.py` |
 | `RATE_LIMIT_ENABLED` | `true` | Install the rate-limit middleware. | `src/api/server.py` |
 | `RATE_LIMIT_REQUESTS` | `100` | Requests per minute per client IP. | `src/api/server.py` |
 | `REQUEST_TIMEOUT` | `30` | Request timeout in seconds. | `src/api/server.py` |

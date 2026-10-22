@@ -29,7 +29,7 @@ the code. The key findings:
 | CI/CD | No `.github/` directory or workflow. | Two-job GitHub Actions workflow (D18, R27). |
 | SQLite database, backup and retention | `data.db` was an orphan; the API never touched it. | Ingestion chain and scripts deleted (D9, R22/R29). |
 | Streamlit UI | Read `predicted_demand` while the API returned `expected_demand`; the Advanced tab shipped a fake response. | Contract test and real schema (D20, R10/R11). |
-| Tests | 17 tests passed, but some tested dead classes and some asserted the bug. | Offline suite of 134 tests with an import-graph guard. |
+| Tests | 17 tests passed, but some tested dead classes and some asserted the bug. | Offline suite of 138 tests with an import-graph guard. |
 | Docker | Images were real; the prod compose referenced missing nginx config and shipped no model. | One hardened image that builds its own model (D31, R25). |
 | MLflow | Tracking was real; registry loading fell back silently; promotion used deprecated stage APIs. | Optional lazy registry, loud fallback, alias-based promotion (D7/D8, R5). |
 
@@ -102,9 +102,10 @@ P0 = 8, P1 = 20, P2 = 7.
 | 2026-06-07 | Last pre-audit commit; the audit's reference baseline. | `c32841f` |
 | 2026-09-27/28 | Audit completed; state, roadmap, decisions and conventions written; P0 scoped. | planning commits |
 | 2026-09-29 | R1: L-BFGS-B replaced by a derivative-free dense grid search. | `b21e45a` |
-| 2026-09-30 | R5/R6/R7/R9/R10: real-model tests, one method name, API contract. | several commits |
-| 2026-10-07 | R15/D13: drift detection removed. | several commits |
-| 2026-10-13 | R35 single config; R26 bounded startup; D27 pin policy. | `5a8f887`, `7cdbf56` |
+| 2026-09-29 | R2–R11 core: complete feature frame, lazy MLflow, method name, real-model tests, API and UI contracts. | `b21e45a`, `b48d18a`, `bc2f674` |
+| 2026-09-30 | R12: chronological split, `product_id` dropped, model retrained. | `47162d3` |
+| 2026-10-15 | R15: dead drift code removed. | `e3c9961` |
+| 2026-10-15 | R35 single config; R26 bounded startup. | `283f8d3`, `46ca83a` |
 | 2026-10-15 | D30: seeded generator and config-driven size. | `1abfc1b` |
 | 2026-10-15 | D30/R25: data and model built inside the image. | `51c5c38` |
 | 2026-10-16 | R23: `scripts/verify_readme.sh` runs the quickstart end to end. | `5e17dbc` |
