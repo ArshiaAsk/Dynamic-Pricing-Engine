@@ -72,6 +72,18 @@ grid-search optimizer to maximize revenue while respecting business constraints
 
 ---
 
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Operations](docs/OPERATIONS.md)
+- [Architecture decisions](docs/DECISIONS.md)
+- [Engineering conventions](docs/ENGINEERING_CONVENTIONS.md)
+- [Rebuild history](docs/REBUILD_HISTORY.md)
+- [Limitations and next steps](docs/LIMITATIONS_AND_NEXT_STEPS.md)
+
+---
+
 ## Getting Started
 
 ### Prerequisites
