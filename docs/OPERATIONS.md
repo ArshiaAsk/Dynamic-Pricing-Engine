@@ -112,9 +112,7 @@ Verified response with the seed-42 artifact:
   "optimization_method": "grid_search",
   "profit_margin": 0.1429,
   "profit_per_unit": 375159.38,
-  "total_profit": 32378187.22,
-  "optimization_success": null,
-  "optimization_iterations": null
+  "total_profit": 32378187.22
 }
 ```
 

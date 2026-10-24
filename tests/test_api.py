@@ -320,3 +320,30 @@ def test_optimizer_failure_returns_generic_error(client, monkeypatch):
     raw = response.text
     for leaked in _LEAKY_STRINGS:
         assert leaked not in raw, f"internal error text {leaked!r} leaked to client"
+
+
+def test_response_has_no_always_null_fields(client):
+    """D20 follow-up: the always-null fields are gone from the contract."""
+    response = client.post(
+        "/v1/optimize-price", json=_payload(optimization_method="grid_search")
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    for field in ("optimization_success", "optimization_iterations"):
+        assert field not in body, f"{field} is still returned"
+        assert field not in PricingResponse.model_fields, f"{field} is still declared"
+
+
+def test_engine_result_does_not_carry_an_unexposed_model_version():
+    """model_version was computed and then dropped by the response schema."""
+    from src.api.router import engine
+
+    base_features = {
+        key: value for key, value in BASE_PAYLOAD.items() if key not in _OPTIMIZER_KEYS
+    }
+    result = engine.get_optimal_price(
+        base_features, BASE_PAYLOAD["price_min"], BASE_PAYLOAD["price_max"]
+    )
+
+    assert "model_version" not in result

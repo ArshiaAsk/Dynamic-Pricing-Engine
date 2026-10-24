@@ -204,6 +204,5 @@ class PricingEngine:
             )
 
         result["optimization_method"] = method
-        result["model_version"] = self._current_version
 
         return result

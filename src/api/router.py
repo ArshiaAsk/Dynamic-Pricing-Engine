@@ -31,10 +31,10 @@ health_checker = get_health_checker()
 @router.post("/optimize-price", response_model=PricingResponse)
 def optimize_price(payload: PricingRequest):
     """
-    Optimize product price based on demand forecasting
-    
-    Supports both grid search and Bayesian optimization methods.
-    Can include business constraints like minimum margin and inventory limits.
+    Optimize product price based on demand forecasting.
+
+    Uses the grid_search optimizer (alias: grid) and can include business
+    constraints like a minimum margin and an inventory limit.
     """
     request_id = str(uuid.uuid4())
     start_time = time.time()

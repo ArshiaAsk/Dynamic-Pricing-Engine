@@ -96,21 +96,14 @@ These are proven facts that were noticed but not changed in the P2 batch.
    is run as a script. The README records 98% for the whole `src/api` package.
 3. **The pickle is tied to the installed XGBoost version.** This is a consequence of joblib
    serialization, not a bug, but it makes the artifact non-portable across upgrades.
-4. **Two response fields are always null.** `optimization_success` and
-   `optimization_iterations` are declared in `PricingResponse` but never populated. The
-   engine computes `model_version`, but it is not in the response schema, so it is dropped
-   from the HTTP response.
-5. **The engine is constructed at import time.** `src/api/router.py` opens the config and
+4. **The engine is constructed at import time.** `src/api/router.py` opens the config and
    builds `PricingEngine` when the module is imported. A missing model or feature contract
    therefore raises during import, before any request; a fresh clone must build the
    artifacts first.
-6. **A stale docstring survives in the router.** `src/api/router.py` still says the endpoint
-   "Supports both grid search and Bayesian optimization methods", although only
-   `grid_search` and `grid` are accepted. The API contract is correct; the comment is not.
-7. **The served price range versus the training range is a modelling gap, not only a
+5. **The served price range versus the training range is a modelling gap, not only a
    documentation one.** It is listed under limitations above because it affects every
    default request.
-8. **The rate limiter keys on the client IP.** Behind a proxy or load balancer, all clients
+6. **The rate limiter keys on the client IP.** Behind a proxy or load balancer, all clients
    may share one bucket unless the proxy forwards a trustworthy client address.
 
 ## C. Parked Phase 3 plan

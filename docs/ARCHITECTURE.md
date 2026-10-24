@@ -183,8 +183,7 @@ the constrained path runs.
 `src/api/schemas.py` defines `PricingResponse` with:
 
 `optimal_price`, `expected_demand`, `expected_revenue`, `optimization_method`,
-`profit_margin`, `profit_per_unit`, `total_profit`, `optimization_success`,
-`optimization_iterations`.
+`profit_margin`, `profit_per_unit`, `total_profit`.
 
 A verified call with the README payload returns HTTP 200 and:
 
@@ -196,14 +195,12 @@ A verified call with the README payload returns HTTP 200 and:
   "optimization_method": "grid_search",
   "profit_margin": 0.1429,
   "profit_per_unit": 375159.38,
-  "total_profit": 32378187.22,
-  "optimization_success": null,
-  "optimization_iterations": null
+  "total_profit": 32378187.22
 }
 ```
 
-The two `null` fields are declared but never populated. The engine also computes
-`model_version`, but it is not part of `PricingResponse` and is therefore not returned.
+The engine no longer computes a `model_version`; when a registry model is served, its
+version is reported by `/v1/health` as `checks.model.version`.
 `product_id` is accepted for compatibility and logging only; it is not a model feature.
 
 ### 5.4 Model loading and registry fallback

@@ -103,10 +103,6 @@ class PricingResponse(BaseModel):
     profit_per_unit: Optional[float] = Field(None, description="Profit per unit")
     total_profit: Optional[float] = Field(None, description="Total expected profit")
     
-    # Optimization metadata
-    optimization_success: Optional[bool] = Field(None, description="Optimization succeeded")
-    optimization_iterations: Optional[int] = Field(None, description="Number of iterations")
-    
     model_config = {
         "json_schema_extra": {
             "example": {
@@ -116,9 +112,7 @@ class PricingResponse(BaseModel):
                 "optimization_method": "grid_search",
                 "profit_margin": 0.1429,
                 "profit_per_unit": 375159.38,
-                "total_profit": 32378187.22,
-                "optimization_success": None,
-                "optimization_iterations": None
+                "total_profit": 32378187.22
             }
         }
     }

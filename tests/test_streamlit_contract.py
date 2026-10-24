@@ -114,3 +114,9 @@ def test_app_contains_no_fabricated_response_keys():
     assert "confidence_interval" not in source
     assert "optimization_metadata" not in source
     assert "example_response" not in source
+
+
+def test_response_schema_has_no_always_null_fields():
+    """D20 follow-up: fields that were never populated are removed."""
+    for field in ("optimization_success", "optimization_iterations", "model_version"):
+        assert field not in PricingResponse.model_fields, f"{field} is still declared"
