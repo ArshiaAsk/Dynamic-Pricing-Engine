@@ -7,8 +7,8 @@ status, the context, the decision and its consequences.
 **Status values:** `accepted` (approved and in force) · `superseded` (replaced by a later
 entry or by a repository rule; the entry links to its successor).
 
-**Current status at P2 closure (2026-10-22):** D1, D2, D4–D13, D15–D21 and D24–D31 are
-`accepted`. **D3, D14, D22 and D23 are `superseded`** and are kept for the record. D15 is
+**Current status at P2 closure (2026-10-22):** D1, D2, D4–D13, D15–D21 and D24–D32 are
+`accepted` (D32 was accepted on 2026-10-24). **D3, D14, D22 and D23 are `superseded`** and are kept for the record. D15 is
 historical: the agent records directory it created was replaced by this `docs/` directory.
 
 The implementation pointer for each decision is in the table below. Paths and test names
@@ -48,6 +48,7 @@ mention files that were later deleted; those mentions describe the state at the 
 | D29 | accepted | `.dockerignore` tracked and cleaned; `tests/test_repo_hygiene.py`. |
 | D30 | accepted | Seeded generator, config-driven size, model built in the image; `tests/test_generator_determinism.py`, `tests/test_dockerfile_model_build.py`. |
 | D31 | accepted | Hardened image, pinned MLflow image, compose hardening; `tests/test_dockerfile_hardening.py`, `tests/test_compose_files.py`, `scripts/docker_smoke.sh`. |
+| D32 | accepted | `models/training_support.json` written by training; serving rejects out-of-support requests and fills history defaults from training medians; `tests/test_training_support.py`, `tests/test_documented_inputs_in_support.py`. |
 
 ---
 
@@ -292,5 +293,18 @@ Context: `Dockerfile.prod` (multi-stage, non-root `appuser`, `HEALTHCHECK` at `D
 Decision: Keep **one** `Dockerfile` that (a) builds data+model after `COPY . .`, (b) installs dependencies in a builder stage, (c) runs as a non-root user, and (d) defines a `HEALTHCHECK`; add `restart: unless-stopped` and a read-only `configs` mount to `docker-compose.yml`; delete `Dockerfile.prod` and `docker-compose.prod.yml`. CI's `docker` job verifies the image builds, the service becomes healthy, and the process uid is not 0.
 Consequences: README's "non-root" claim and compose commands are updated; this rules out maintaining two production image paths; `logs/` and any mounted directory must be writable by the non-root user (otherwise the JSONL prediction logger and the read-only config mount fail). **Do not implement until this entry is marked `accepted`** (a repository hard rule).
 Implementation note (2026-10-19): implemented by this batch's commits C1 `1d45e8e` (main `Dockerfile`: builder stage + non-root `appuser` + `HEALTHCHECK`), C2 `39fc31e` (compose restart policy / read-only `configs` / `app_logs` named volume / `version` key and `./data` mount removed), C3 `06f62f3` (pinned `Dockerfile.mlflow`, no pip-install-at-start), C4 `1b09d21` (deletion of `Dockerfile.prod` and `docker-compose.prod.yml`, README update) and C5 `4496ca7` (smoke script checks uid != 0, Docker health status and MLflow `/health`). **User-reported:** after pushing `caae3aa`, both CI jobs (`test`, `docker`) ran green; the `docker` job built the main image, started `pricing-api` and got `/v1/health` 200. That validates the existing smoke path, **not** the D31 hardening. **D31 docker-job result (user-reported 2026-10-19):** the builder stage, non-root uid 1000, in-image model build and Docker `HEALTHCHECK` are verified (all PASSED); the mlflow service was **NOT** healthy - `mlflow /health` failed because the container restart-looped with `ModuleNotFoundError: No module named 'psycopg'` from `sqlalchemy/dialects/postgresql/psycopg.py` (SQLAlchemy 2.1 maps a bare `postgresql://` to psycopg v3). Fixed in `0aeb1be` by naming the driver (`postgresql+psycopg2://`); the mlflow service will be re-verified by the next CI run after the fix. All other Docker claims remain **static check only**.
+
+## D32: Serve and document the model on its training scale and support
+Date: 2026-10-24
+Status: accepted
+Context: The audit measured a scale mismatch between the model and everything that feeds it. The generator draws a base price from 200,000 to 5,000,000 and sets `our_price` from the competitor price (roughly `competitor_price × U(0.85, 1.15)`); the built training file spans 2.4e5–5.9e6 and 5 of its 30 features carry the absolute price scale (`price`, `log_price`, `roll_mean_price_7/14/28`). The training support of `price_ratio` is [0.85002, 1.14994]. Every default, example and test input in the repository instead used prices of 30–200, so the served model was extrapolating on every request. Over [30, 120] the model's predicted demand is constant, and the served optimizer therefore returned `price_max`; `tests/test_optimizer_real.py` could not notice because its reference optimum comes from the same model. Some serving defaults for history features (`roll_mean_units_28` 39.8, `roll_std_units_14` 6.1, `roll_std_units_28` 7.3) also lie outside the training range.
+Decision:
+1. Keep the generator, the data, the model, the trainer hyperparameters and every published metric unchanged. No retrain: R² 0.419, MAPE 0.351, MAE 22.70 and the multi-seed means stay true.
+2. Every default, example, UI default and test input uses the training price scale and lies inside the training support: the competitor price within the observed competitor range, and the own price within the observed `price_ratio` support around that competitor price. Prices are labelled "currency units" (no currency symbol).
+3. Training writes `models/training_support.json` (generated and untracked, like the pickle): per-feature min/max/median computed from the **train split only**, plus the `price`, `competitor_price` and `price_ratio` ranges.
+4. The engine loads that file at startup and fails loudly if it is missing or invalid. The API rejects a request whose competitor price or price bounds lie outside the support with HTTP 422, a stable error code and the supported ranges.
+5. Serving defaults for the history features (lags and rolling unit statistics) are the training medians from that file; no module-level numeric defaults.
+6. Tests enforce the contract: documented/default inputs are in support; predicted demand varies with price inside the support; all 30 served features lie inside the training range for in-support requests.
+Consequences: The API contract gains an outside-training-support 422. There are no absolute price defaults anywhere: the default bound is derived from the support and the request's competitor price. The recorded limitation is that the model's price response is identified only within about ±15% of the competitor price (the observed `price_ratio` overlap and positivity region), so a recommendation outside that band would be extrapolation. The model, the data and the published metrics are unchanged; the support file is a new generated artifact.
 
 ---
