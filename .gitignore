@@ -50,6 +50,7 @@ data/features/*.parquet
 # Models
 models/*.pkl
 models/*.joblib
+models/training_support.json
 !models/.gitkeep
 
 # Logs

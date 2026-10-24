@@ -42,6 +42,7 @@ CURRENT_STATE = [
 # Generated, gitignored artifacts that current-state docs may name.
 IGNORE_PREFIXES = (
     "models/demand_model.pkl",
+    "models/training_support.json",
     "data/",
     "reports/",
     "logs/",

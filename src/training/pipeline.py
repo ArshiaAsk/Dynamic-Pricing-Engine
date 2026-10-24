@@ -5,6 +5,7 @@ import joblib
 from src.training.dataset import DatasetBuilder
 from src.training.trainer import DemandModelTrainer
 from src.training.evaluate import ModelEvaluator
+from src.training.support import SUPPORT_FILENAME, compute_training_support
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -77,15 +78,22 @@ class TrainingPipeline:
             **residual_stats
         }
 
+        # Training support for serving (D32): TRAIN split only, never the
+        # validation split.
+        training_support = compute_training_support(X_train, features)
+
         # Save artifacts
-        self.save_artifacts(model, all_metrics, features, feature_importance)
+        self.save_artifacts(
+            model, all_metrics, features, feature_importance, training_support
+        )
 
         logger.info("=" * 60)
         logger.info("Training Pipeline Completed Successfully")
         logger.info(f"Final R2: {metrics['R2']:.3f}, MAE: {metrics['MAE']:.2f}")
         logger.info("=" * 60)
 
-    def save_artifacts(self, model, metrics, features, feature_importance):
+    def save_artifacts(self, model, metrics, features, feature_importance,
+                       training_support):
         """Save model, metrics, and analysis artifacts"""
         
         # Save model
@@ -96,6 +104,12 @@ class TrainingPipeline:
         # Save feature list
         with open(self.model_dir / "features.json", "w") as f:
             json.dump(features, f, indent=2)
+
+        # Save the training support (generated, gitignored like the pickle)
+        support_path = self.model_dir / SUPPORT_FILENAME
+        with open(support_path, "w") as f:
+            json.dump(training_support, f, indent=2)
+        logger.info(f"Training support saved to {support_path}")
 
         # Save metrics
         with open(self.report_dir / "training_metrics.json", "w") as f:

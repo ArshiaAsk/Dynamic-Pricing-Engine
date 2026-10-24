@@ -1,7 +1,7 @@
 """D32: every documented or default input lies inside the model's training support.
 
-The support is read from the generated training features
-(``data/features/training_features.parquet``): the observed range of
+The support is read from the generated artifact ``models/training_support.json``
+(written by training from the train split only): the observed range of
 ``competitor_price`` and of ``price_ratio``. Every documented or default input
 in the repository is then parsed and checked:
 
@@ -26,12 +26,11 @@ import json
 import re
 from pathlib import Path
 
-import pandas as pd
 import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PARQUET = REPO_ROOT / "data" / "features" / "training_features.parquet"
+SUPPORT_PATH = REPO_ROOT / "models" / "training_support.json"
 README = REPO_ROOT / "README.md"
 APP = REPO_ROOT / "app.py"
 SMOKE = REPO_ROOT / "tests" / "smoke_tests.py"
@@ -58,15 +57,15 @@ _YAML_BLOCK_RE = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
 
 @pytest.fixture(scope="module")
 def support():
-    """Observed ranges from the generated training features."""
-    if not PARQUET.exists():
-        pytest.skip(f"Generated training features not found: {PARQUET}")
-    frame = pd.read_parquet(PARQUET, columns=["competitor_price", "price_ratio"])
+    """Observed ranges from the generated training-support artifact."""
+    if not SUPPORT_PATH.exists():
+        pytest.skip(f"Generated support artifact not found: {SUPPORT_PATH}")
+    artifact = json.loads(SUPPORT_PATH.read_text())
     return {
-        "competitor_min": float(frame["competitor_price"].min()),
-        "competitor_max": float(frame["competitor_price"].max()),
-        "ratio_min": float(frame["price_ratio"].min()),
-        "ratio_max": float(frame["price_ratio"].max()),
+        "competitor_min": artifact["competitor_price"]["min"],
+        "competitor_max": artifact["competitor_price"]["max"],
+        "ratio_min": artifact["price_ratio"]["min"],
+        "ratio_max": artifact["price_ratio"]["max"],
     }
 
 

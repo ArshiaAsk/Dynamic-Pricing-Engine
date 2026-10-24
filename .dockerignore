@@ -41,8 +41,9 @@ data/raw/*
 data/processed/*
 data/features/
 
-# Models (the image builds its own model; never copy local pickles)
+# Models (the image builds its own model; never copy local artifacts)
 models/*.pkl
+models/training_support.json
 
 # MLflow
 mlruns/

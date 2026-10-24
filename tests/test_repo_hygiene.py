@@ -67,6 +67,15 @@ def test_gitignore_does_not_ignore_dockerignore():
     )
 
 
+def test_ignores_the_training_support_artifact():
+    """D32: the generated support file is untracked and out of the image context."""
+    for path in (GITIGNORE, DOCKERIGNORE):
+        entries = set(_entries(path))
+        assert "models/training_support.json" in entries, (
+            f"{path} must contain the entry 'models/training_support.json'; got {sorted(entries)}"
+        )
+
+
 def test_dockerignore_excludes_local_model_and_features():
     """D30: ``.dockerignore`` excludes local model pickles and built features.
 
