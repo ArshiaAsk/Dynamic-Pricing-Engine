@@ -26,13 +26,26 @@ does not estimate what would happen under an intervention. The README states thi
 metrics (R² 0.4193, MAPE 0.3509) describe how well the model learns that generator. They are
 not evidence of real-world accuracy.
 
-### The served price range is far outside the training distribution
+### The model's price response is identified only inside its training support
 
-The generator draws base prices from 200,000 to 5,000,000; the generated file spans roughly
-240,000 to 5,930,000. The API's default price range is 30.0 to 120.0
-(`configs/config.yaml`), and the README example uses 70 to 110. The model therefore
-extrapolates on every default request. The ratio and log features soften this, but the
-absolute price features are outside their training range.
+The generator draws base prices from 200,000 to 5,000,000 and sets `our_price` from the
+competitor price (roughly `competitor_price × U(0.85, 1.15)`). The train split spans
+prices 239,908–5,933,502, competitor prices 280,057–5,273,150 and `price_ratio`
+0.85002–1.14994. The price response is therefore identified only within about ±15% of the
+competitor price (the observed ratio overlap and positivity region); a recommendation
+outside that band would be extrapolation.
+
+D32 measured and fixed the serving side. Before it, every default, example and test input
+used prices of 30–200, the model's predicted demand was constant over that range, and the
+optimizer returned `price_max` on every request; `tests/test_optimizer_real.py` could not
+notice because its reference came from the same model. Now every documented/default input
+lies on the training scale, `models/training_support.json` records the train-split support,
+and the API rejects an out-of-support competitor price or price bound with HTTP 422.
+
+Residual, not fixed: above a competitor price of about 4.6M, the 1.08x bound pushes the
+serving `roll_mean_price_*` features (set to the candidate price) above their own
+train-split maximum; the API validates the `price_ratio`, not that absolute range.
+Calendar features are not validated against their training range either.
 
 ### The model's explanatory power is modest
 
@@ -97,19 +110,22 @@ These are proven facts that were noticed but not changed in the P2 batch.
 3. **The pickle is tied to the installed XGBoost version.** This is a consequence of joblib
    serialization, not a bug, but it makes the artifact non-portable across upgrades.
 4. **The engine is constructed at import time.** `src/api/router.py` opens the config and
-   builds `PricingEngine` when the module is imported. A missing model or feature contract
-   therefore raises during import, before any request; a fresh clone must build the
-   artifacts first.
-5. **The served price range versus the training range is a modelling gap, not only a
-   documentation one.** It is listed under limitations above because it affects every
-   default request.
+   builds `PricingEngine` when the module is imported. A missing model, feature contract or
+   training support therefore raises during import, before any request; a fresh clone must
+   build the artifacts first.
+5. **The training support is narrower than the generated data.** It is computed from the
+   train split only, so the observed calendar range stops at week 43 / month 10 and
+   `cos_annual` stops at 0.814 even though the full generated year reaches December. The
+   API validates prices, not calendar features; an in-support price request can still
+   carry a calendar value outside the train range.
 6. **The rate limiter keys on the client IP.** Behind a proxy or load balancer, all clients
    may share one bucket unless the proxy forwards a trustworthy client address.
 
 ## C. Parked Phase 3 plan
 
-This plan was parked at the end of P2 and is **not started**. It is written as a spec so it
-can be picked up without re-deriving the intent.
+This plan was parked at the end of P2 and is **still open**. D32 changed serving and
+documentation, not the model or the evaluation, so none of the diagnostics below has been
+run. It is written as a spec so it can be picked up without re-deriving the intent.
 
 ### C.1 Machine learning
 
@@ -166,5 +182,6 @@ level rather than adding a new capability.
 
 ## D. Phase 3 diagnostics
 
-Phase 3 diagnostics have **not been run**. No oracle R², regret, uplift or ablation results
-exist in this repository. The plan above is the specification for running them.
+Phase 3 diagnostics have **not been run**. No oracle R², baseline comparison, regret, uplift
+or ablation results exist in this repository. The plan above is the specification for
+running them, and it remains open after D32.

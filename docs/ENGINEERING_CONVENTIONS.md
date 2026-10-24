@@ -163,6 +163,12 @@ The enforcement tag says how the rule is checked today:
     subprocess calls and no `.git` directory in tests; read tracked files directly. Verify
     CI scripts at the committed HEAD, never before committing the files they test. —
     **enforced (test/script)** by `tests/test_ci_workflow.py`.
+37. Every documented default or example input must lie inside the model's training support,
+    enforced by a test, and the API must reject requests outside it. The support is the
+    train split's observed range (`models/training_support.json`); a documented input
+    outside it teaches users an extrapolation the model cannot make. — **enforced
+    (test/script)** by `tests/test_documented_inputs_in_support.py` and
+    `tests/test_training_support.py`.
 
 ## How the rebuild was run (historical)
 

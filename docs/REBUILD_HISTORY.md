@@ -29,7 +29,7 @@ the code. The key findings:
 | CI/CD | No `.github/` directory or workflow. | Two-job GitHub Actions workflow (D18, R27). |
 | SQLite database, backup and retention | `data.db` was an orphan; the API never touched it. | Ingestion chain and scripts deleted (D9, R22/R29). |
 | Streamlit UI | Read `predicted_demand` while the API returned `expected_demand`; the Advanced tab shipped a fake response. | Contract test and real schema (D20, R10/R11). |
-| Tests | 17 tests passed, but some tested dead classes and some asserted the bug. | Offline suite of 138 tests with an import-graph guard. |
+| Tests | 17 tests passed, but some tested dead classes and some asserted the bug. | Offline suite of 160 tests with an import-graph guard. |
 | Docker | Images were real; the prod compose referenced missing nginx config and shipped no model. | One hardened image that builds its own model (D31, R25). |
 | MLflow | Tracking was real; registry loading fell back silently; promotion used deprecated stage APIs. | Optional lazy registry, loud fallback, alias-based promotion (D7/D8, R5). |
 
@@ -115,6 +115,7 @@ P0 = 8, P1 = 20, P2 = 7.
 | 2026-10-20 | CI docker job found the MLflow driver bug; fixed by naming psycopg2. | `0aeb1be` |
 | 2026-10-20 | Final agent-record update before the documentation move. | `1827883` |
 | 2026-10-22 | P2 closure: docs moved to `docs/`, agent workflow files removed. | see the final commits of this batch |
+| 2026-10-24 | D32: serve and document the model on its training scale and support. | this batch |
 
 ## 5. Incidents and lessons
 
@@ -154,6 +155,27 @@ that an interior reference argmax is not answered on a bound. R2 also recorded t
 grid spacing is now adaptive.
 
 **Lesson:** assert the property the system promises, in the units the model actually has.
+
+### The model was served two orders of magnitude off its training scale
+
+The generator produces prices of 2.4e5–5.9e6 and a `price_ratio` support of
+[0.85002, 1.14994]. Every default, example and test input in the repository used prices of
+30–200. Over that range the model's predicted demand is constant, so the served optimizer
+returned `price_max` on every request. The real-model optimizer test could not see it
+because it computed its reference from the same model on the same out-of-scale bounds. The
+audit also found history-feature defaults (`roll_mean_units_28` 39.8,
+`roll_std_units_14` 6.1, `roll_std_units_28` 7.3) outside the training range.
+
+D32 moved every default, example and test input onto the training scale, made training
+write `models/training_support.json` from the train split only, made serving reject
+out-of-support requests with HTTP 422, and filled omitted history features with training
+medians. The generator, data, model and published metrics did not change: the pickle, the
+feature parquet and `reports/training_metrics.json` are byte-identical before and after.
+
+**Lesson:** a test whose reference value comes from the same model cannot detect a scale
+or support mismatch. Pair the reference with an independent statement of the domain the
+model was trained on (here, the train split's min/max), and assert that the documented
+inputs lie inside it.
 
 ### The unseeded generator
 

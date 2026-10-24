@@ -24,7 +24,8 @@ A fresh clone has no data and no model; both are gitignored.
 # 18,250 raw rows -> 16,500 feature rows
 python scripts/regenerate_data.py
 
-# writes models/demand_model.pkl, models/features.json, reports/
+# writes models/demand_model.pkl, models/features.json,
+# models/training_support.json (train-split support) and reports/
 python -m src.training.train
 ```
 
@@ -119,6 +120,22 @@ Verified response with the seed-42 artifact:
 `product_id` is accepted for compatibility and logging only. It is not a model feature
 and does not change the recommendation. `optimization_method` accepts
 `grid_search` or `grid`; the legacy value `bayesian` is rejected with HTTP 422.
+
+A request outside the model's training support is also a 422, with
+`error: "outside_training_support"`, field-level `details` and the supported ranges in
+`message`. The rules (DECISIONS D32):
+
+- `competitor_price` must lie in the observed competitor range;
+- `price_min` and `price_max` must lie in
+  `[price_ratio.min × competitor_price, price_ratio.max × competitor_price]`;
+- an omitted bound defaults to that same ratio band; an omitted history feature
+  (the nine lags and rolling unit statistics) defaults to the train-split median.
+
+The ranges come from `models/training_support.json` (train split only), which the API
+loads at startup; `/v1/health` reports `checks.model.training_support`. For the current
+artifact: competitor 280,057.01–5,273,149.72 and `price_ratio` 0.85002–1.14994. A
+request that worked on the old 30–200 price scale now returns 422 rather than a
+recommendation at a price bound.
 
 ## Streamlit UI
 
@@ -259,10 +276,11 @@ python -m src.training.train
 python -m src.api.server
 ```
 
-### Missing model on a fresh clone
+### Missing model or training support on a fresh clone
 
-Importing the API raises `FileNotFoundError: models/demand_model.pkl` because the model
-is gitignored. Build it first:
+Importing the API raises `FileNotFoundError: models/demand_model.pkl` (or
+`TrainingSupportError: Training support artifact not found: models/training_support.json`)
+because both are generated and gitignored. Build them first:
 
 ```bash
 python scripts/regenerate_data.py

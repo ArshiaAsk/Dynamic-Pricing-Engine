@@ -29,9 +29,11 @@ flowchart LR
     FEAT --> TRAIN[python -m src.training.train]
     TRAIN --> MODEL[models/demand_model.pkl]
     TRAIN --> FJSON[models/features.json]
+    TRAIN --> SUPPORT[models/training_support.json]
     TRAIN --> REPORTS[reports/]
     MODEL --> ENGINE[src/pricing/engine.py]
     FJSON --> ENGINE
+    SUPPORT --> ENGINE
     ENGINE --> OPT[src/pricing/optimizer.py]
     OPT --> API[FastAPI src/api/server.py]
     API --> UI[Streamlit app.py]
@@ -117,6 +119,9 @@ writes:
 
 - `models/demand_model.pkl` (gitignored);
 - `models/features.json` (tracked);
+- `models/training_support.json` (gitignored): per-feature min/max/median from the
+  **train split only**, plus the `price`, `competitor_price` and `price_ratio` ranges
+  (`src/training/support.py`, DECISIONS D32);
 - `reports/training_metrics.json` (gitignored);
 - `reports/feature_importance.csv` (gitignored).
 
@@ -141,13 +146,15 @@ logs parameters, metrics, the model and artifacts to the MLflow tracking URI
 1. `src/api/server.py` builds the FastAPI app, installs CORS, logging, error, rate-limit
    and timeout middleware, and mounts the router under `/v1`.
 2. `src/api/router.py` loads `configs/config.yaml` and constructs one `PricingEngine`
-   at import time. The engine loads the feature contract and a model.
+   at import time. The engine loads the feature contract, a model and the training
+   support.
 3. `POST /v1/optimize-price` validates the body with `PricingRequest`.
 4. The router removes optimization-only fields, takes the price bounds from the request
-   or, when they are omitted, derives them as 0.92x / 1.08x the request's competitor
-   price (inside the observed `price_ratio` training support), and calls
-   `PricingEngine.get_optimal_price`. There is no absolute price default.
-5. The engine dispatches to `PriceOptimizer`, logs the result to the JSONL prediction
+   or, when they are omitted, derives them from the observed `price_ratio` support
+   around the request's competitor price. There is no absolute price default.
+5. The router rejects a request outside the training support with HTTP 422 and fills
+   omitted history features with the training medians (section 5.3).
+6. The engine dispatches to `PriceOptimizer`, logs the result to the JSONL prediction
    log, records the request in the health checker, and returns `PricingResponse`.
 
 ### 5.2 Optimizer
@@ -178,7 +185,38 @@ Constraints:
 The result also includes `profit_margin`, `profit_per_unit` and `total_profit` when
 the constrained path runs.
 
-### 5.3 Response contract
+### 5.3 Training support
+
+Training writes `models/training_support.json` (`src/training/support.py`) from the
+**train split only**: `n_rows`, `split: "train"`, a `features` map with
+`min`/`max`/`median` for each of the 30 model columns, and the same statistics for
+`price`, `competitor_price` and `price_ratio`. `PricingEngine.load_model` loads it from
+`pricing.training_support_path` and fails loudly when the file is missing or invalid
+(`TrainingSupportError`, like a missing model).
+
+`src/pricing/support.py` turns it into serving rules:
+
+- **Competitor range:** `competitor_price` must lie in the observed competitor range.
+- **Price bounds:** `price_min` and `price_max` must lie in
+  `[price_ratio.min × competitor_price, price_ratio.max × competitor_price]`. The
+  comparison uses the stored values with a 1e-9 relative tolerance, so a bound exactly
+  on a limit is accepted.
+- **Defaults:** an omitted bound is that same ratio band around the competitor price;
+  an omitted history feature (the nine lags and rolling unit statistics) is the
+  train-split median.
+- **Rejection:** a violation returns HTTP 422 with `error: "outside_training_support"`,
+  a message containing the supported ranges, field-level `details` and the
+  `request_id`.
+
+`/v1/health` reports `checks.model.training_support` as
+`{"loaded": true, "split": "train", "n_rows": 13200}`. The artifact is generated and
+gitignored; `.dockerignore` excludes it, so the image builds its own.
+
+The model's price response is identified only inside that support (about ±15% of the
+competitor price); a recommendation outside it would be extrapolation. The API also does
+not validate calendar features against their training range.
+
+### 5.4 Response contract
 
 `src/api/schemas.py` defines `PricingResponse` with:
 
@@ -203,7 +241,7 @@ The engine no longer computes a `model_version`; when a registry model is served
 version is reported by `/v1/health` as `checks.model.version`.
 `product_id` is accepted for compatibility and logging only; it is not a model feature.
 
-### 5.4 Model loading and registry fallback
+### 5.5 Model loading and registry fallback
 
 `src/pricing/engine.py` imports MLflow lazily. On load it:
 
@@ -215,13 +253,17 @@ version is reported by `/v1/health` as `checks.model.version`.
 4. records `model_source` as `"mlflow"` or `"local"` and exposes it on `/v1/health`.
 
 The fallback is never silent: an unreachable registry or a missing promotion produces an
-ERROR log and `checks.model.source == "local"`. The local artifact and
-`models/features.json` must exist; otherwise the engine raises at import time.
+ERROR log and `checks.model.source == "local"`. The local artifact,
+`models/features.json` and `models/training_support.json` must exist; otherwise the
+engine raises at import time.
 
-### 5.5 Errors, limits and timeouts
+### 5.6 Errors, limits and timeouts
 
 - **Validation errors:** HTTP 422 with field-level details and a `request_id`
   (`src/api/error_handlers.py`).
+- **Outside the training support:** HTTP 422 with `error: "outside_training_support"`, the
+  supported ranges in `message`, field-level `details` and a `request_id`
+  (`src/api/router.py`, section 5.3).
 - **Unexpected errors:** HTTP 500 with a generic message and `request_id`; the exception
   text is logged server-side and never returned (`src/api/router.py`).
 - **Unhandled middleware errors:** HTTP 500 with `error`, `message` and `request_id`.
@@ -231,16 +273,16 @@ ERROR log and `checks.model.source == "local"`. The local artifact and
 - **Timeout:** a request exceeding `REQUEST_TIMEOUT` seconds returns HTTP 504.
 - **Request id:** `RequestLoggingMiddleware` adds `X-Request-ID` to every response.
 
-### 5.6 Health endpoints
+### 5.7 Health endpoints
 
 | Endpoint | Behaviour |
 |---|---|
-| `GET /v1/health` | Probes the served model with a DataFrame built from the feature contract, reports CPU, memory and disk, and returns 503 when status is not `healthy`. |
+| `GET /v1/health` | Probes the served model with a DataFrame built from the feature contract, reports CPU, memory and disk, reports whether the training support is loaded (`checks.model.training_support`), and returns 503 when status is not `healthy`. |
 | `GET /v1/health/ready` | 200 when a model is loaded, otherwise 503. |
 | `GET /v1/health/live` | Always 200 while the process is alive. |
 | `GET /v1/metrics` | Health counters plus prediction-log statistics. |
 
-### 5.7 Logging
+### 5.8 Logging
 
 `src/utils/logger.py` configures the root logger from `LOG_LEVEL`, `LOG_FORMAT`,
 `LOG_DIR`, `LOG_ROTATION`, `LOG_MAX_BYTES` and `LOG_BACKUP_COUNT`. `json` produces
@@ -259,7 +301,7 @@ them to `logs/predictions/predictions_YYYYMMDD_HH.jsonl`. Errors flush immediate
 |---|---|
 | `data` | `feature_path`, `n_products`, `days`, `seed` |
 | `model` | `n_estimators`, `max_depth`, `learning_rate`, `subsample`, `colsample_bytree`, `min_child_weight`, `gamma`, `reg_alpha`, `reg_lambda` |
-| `pricing` | `model_path`, `feature_columns_path` |
+| `pricing` | `model_path`, `feature_columns_path`, `training_support_path` |
 | `training` | `test_size`, `model_dir`, `report_dir`, `run_cv`, `tuning_trials` |
 | `features` | `lag_days`, `rolling_windows`, `min_history_days` |
 
@@ -339,8 +381,8 @@ four kinds of checks:
 
 | Category | Examples | What it protects |
 |---|---|---|
-| Behavioural | `tests/test_api.py`, `tests/test_optimizer.py`, `tests/test_optimizer_real.py` | The served optimizer reaches at least 0.99× a test-time 901-point reference optimum, respects bounds, the margin floor and the inventory cap. |
-| Contract | `tests/test_serving_features.py`, `tests/test_streamlit_contract.py`, `tests/test_product_id_contract.py` | Feature order, response fields the UI reads, `product_id` not being a feature, no fabricated UI payloads. |
+| Behavioural | `tests/test_api.py`, `tests/test_optimizer.py`, `tests/test_optimizer_real.py`, `tests/test_training_support.py` | The served optimizer reaches at least 0.99× a test-time 901-point reference optimum, respects bounds, the margin floor and the inventory cap; out-of-support requests are rejected and in-support demand varies with price. |
+| Contract | `tests/test_serving_features.py`, `tests/test_streamlit_contract.py`, `tests/test_product_id_contract.py`, `tests/test_documented_inputs_in_support.py` | Feature order, response fields the UI reads, `product_id` not being a feature, no fabricated UI payloads, every documented/default input inside the training support. |
 | Static / architecture | `tests/test_import_graph.py`, `tests/test_config.py`, `tests/test_env.py`, `tests/test_ci_workflow.py`, `tests/test_compose_files.py`, `tests/test_dockerfile_hardening.py`, `tests/test_dockerfile_model_build.py`, `tests/test_repo_hygiene.py`, `tests/test_requirements_pinned.py` | Reachability, config/env read sets, workflow shape, compose validity, non-root/healthcheck, ignore files, pinned dependencies. |
 | Documentation | `tests/test_readme_links.py`, `tests/test_readme_truth.py`, `tests/test_readme_limitations.py`, `tests/test_docs.py` | Links resolve, README paths exist, no removed claims, limitations present, docs paths exist. |
 
@@ -383,6 +425,7 @@ by the CI `docker` job.
 
 **Generated and gitignored:** `data/raw/ecommerce_sales.csv`,
 `data/features/training_features.parquet`, `models/demand_model.pkl`,
+`models/training_support.json`,
 `reports/training_metrics.json`, `reports/feature_importance.csv`, `logs/`, `mlruns/`,
 `mlflow.db`, `htmlcov/`, `.coverage`, `.venv/` and `__pycache__/`. A fresh clone has
 none of them; run the data and training commands in [OPERATIONS.md](OPERATIONS.md) first.
