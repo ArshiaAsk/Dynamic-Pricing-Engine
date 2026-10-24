@@ -74,8 +74,8 @@ with tab1:
             ),
         )
         competitor_price = st.number_input(
-            "Competitor Price ($)",
-            value=89.99,
+            "Competitor Price (currency units)",
+            value=2500000.0,
             min_value=0.01,
             format="%.2f"
         )
@@ -108,30 +108,30 @@ with tab1:
     hist_col1, hist_col2, hist_col3 = st.columns(3)
     
     with hist_col1:
-        lag_1 = st.number_input("Last Day (Lag-1)", value=45.0, min_value=0.0, format="%.1f")
-        lag_7 = st.number_input("Last Week (Lag-7)", value=42.0, min_value=0.0, format="%.1f")
-        lag_14 = st.number_input("2 Weeks Ago (Lag-14)", value=40.0, min_value=0.0, format="%.1f")
+        lag_1 = st.number_input("Last Day (Lag-1)", value=92.0, min_value=0.0, format="%.1f")
+        lag_7 = st.number_input("Last Week (Lag-7)", value=92.0, min_value=0.0, format="%.1f")
+        lag_14 = st.number_input("2 Weeks Ago (Lag-14)", value=93.0, min_value=0.0, format="%.1f")
     
     with hist_col2:
-        roll_mean_7 = st.number_input("7-Day Average", value=43.5, min_value=0.0, format="%.1f")
-        roll_mean_14 = st.number_input("14-Day Average", value=41.2, min_value=0.0, format="%.1f")
-        roll_mean_28 = st.number_input("28-Day Average", value=39.8, min_value=0.0, format="%.1f")
+        roll_mean_7 = st.number_input("7-Day Average", value=96.4, min_value=0.0, format="%.1f")
+        roll_mean_14 = st.number_input("14-Day Average", value=96.9, min_value=0.0, format="%.1f")
+        roll_mean_28 = st.number_input("28-Day Average", value=96.9, min_value=0.0, format="%.1f")
     
     with hist_col3:
-        roll_std_7 = st.number_input("7-Day Std Dev", value=5.2, min_value=0.0, format="%.1f")
-        roll_std_14 = st.number_input("14-Day Std Dev", value=6.1, min_value=0.0, format="%.1f")
-        roll_std_28 = st.number_input("28-Day Std Dev", value=7.3, min_value=0.0, format="%.1f")
+        roll_std_7 = st.number_input("7-Day Std Dev", value=37.4, min_value=0.0, format="%.1f")
+        roll_std_14 = st.number_input("14-Day Std Dev", value=38.5, min_value=0.0, format="%.1f")
+        roll_std_28 = st.number_input("28-Day Std Dev", value=39.2, min_value=0.0, format="%.1f")
     
     # Pricing constraints
     st.subheader("💵 Pricing & Business Constraints")
     constraint_col1, constraint_col2 = st.columns(2)
     
     with constraint_col1:
-        price_min = st.number_input("Minimum Price ($)", value=70.0, min_value=0.01, format="%.2f")
-        price_max = st.number_input("Maximum Price ($)", value=110.0, min_value=0.01, format="%.2f")
+        price_min = st.number_input("Minimum Price (currency units)", value=2300000.0, min_value=0.01, format="%.2f")
+        price_max = st.number_input("Maximum Price (currency units)", value=2700000.0, min_value=0.01, format="%.2f")
     
     with constraint_col2:
-        cost = st.number_input("Product Cost ($)", value=60.0, min_value=0.0, format="%.2f")
+        cost = st.number_input("Product Cost (currency units)", value=2250000.0, min_value=0.0, format="%.2f")
         min_margin_pct = st.slider("Min Profit Margin (%)", 5, 50, 15) / 100.0
     
     optimization_method = st.selectbox(
@@ -192,9 +192,9 @@ with tab1:
                     
                     with result_col1:
                         st.metric(
-                            "💰 Optimal Price",
-                            f"${result['optimal_price']:.2f}",
-                            f"vs Competitor: ${competitor_price:.2f}"
+                            "💰 Optimal Price (currency units)",
+                            f"{result['optimal_price']:,.2f}",
+                            f"vs Competitor: {competitor_price:,.2f}"
                         )
                     
                     with result_col2:
@@ -203,7 +203,7 @@ with tab1:
                         st.metric(
                             "📈 Profit Margin",
                             f"{margin:.1f}%",
-                            f"${profit_per_unit:.2f} per unit"
+                            f"{profit_per_unit:,.2f} per unit"
                         )
                     
                     with result_col3:
@@ -215,8 +215,8 @@ with tab1:
                     with result_col4:
                         total_revenue = result['optimal_price'] * result['expected_demand']
                         st.metric(
-                            "💵 Est. Revenue",
-                            f"${total_revenue:,.0f}"
+                            "💵 Est. Revenue (currency units)",
+                            f"{total_revenue:,.0f}"
                         )
                     
                     # Additional details
@@ -232,11 +232,11 @@ with tab1:
                                 "Method"
                             ],
                             "Value": [
-                                f"${result['optimal_price']:.2f}",
+                                f"{result['optimal_price']:,.2f}",
                                 f"{result['expected_demand']:.2f}",
-                                f"${total_revenue:,.2f}",
-                                f"${cost * result['expected_demand']:,.2f}",
-                                f"${(total_revenue - cost * result['expected_demand']):,.2f}",
+                                f"{total_revenue:,.2f}",
+                                f"{cost * result['expected_demand']:,.2f}",
+                                f"{(total_revenue - cost * result['expected_demand']):,.2f}",
                                 f"{((result['optimal_price'] - competitor_price) / competitor_price * 100):+.1f}%",
                                 optimization_method
                             ]
@@ -281,25 +281,25 @@ with tab2:
     
     example_request = {
         "product_id": 42,
-        "competitor_price": 89.99,
+        "competitor_price": 2500000.0,
         "dow": 2,
         "is_weekend": 0,
         "week": 15,
         "month": 4,
         "sin_annual": 0.5,
         "cos_annual": 0.866,
-        "lag_units_sold_1": 45.0,
-        "lag_units_sold_7": 42.0,
-        "lag_units_sold_14": 40.0,
-        "roll_mean_units_7": 43.5,
-        "roll_mean_units_14": 41.2,
-        "roll_mean_units_28": 39.8,
-        "roll_std_units_7": 5.2,
-        "roll_std_units_14": 6.1,
-        "roll_std_units_28": 7.3,
-        "price_min": 70.0,
-        "price_max": 110.0,
-        "cost": 60.0,
+        "lag_units_sold_1": 92.0,
+        "lag_units_sold_7": 92.0,
+        "lag_units_sold_14": 93.0,
+        "roll_mean_units_7": 96.4,
+        "roll_mean_units_14": 96.9,
+        "roll_mean_units_28": 96.9,
+        "roll_std_units_7": 37.4,
+        "roll_std_units_14": 38.5,
+        "roll_std_units_28": 39.2,
+        "price_min": 2300000.0,
+        "price_max": 2700000.0,
+        "cost": 2250000.0,
         "min_margin_pct": 0.15,
         "inventory_limit": 100
     }
@@ -362,18 +362,18 @@ with tab3:
                         "month": int(row.get('month', 4)),
                         "sin_annual": float(row.get('sin_annual', 0.5)),
                         "cos_annual": float(row.get('cos_annual', 0.866)),
-                        "lag_units_sold_1": float(row.get('lag_units_sold_1', 45.0)),
-                        "lag_units_sold_7": float(row.get('lag_units_sold_7', 42.0)),
-                        "lag_units_sold_14": float(row.get('lag_units_sold_14', 40.0)),
-                        "roll_mean_units_7": float(row.get('roll_mean_units_7', 43.5)),
-                        "roll_mean_units_14": float(row.get('roll_mean_units_14', 41.2)),
-                        "roll_mean_units_28": float(row.get('roll_mean_units_28', 39.8)),
-                        "roll_std_units_7": float(row.get('roll_std_units_7', 5.2)),
-                        "roll_std_units_14": float(row.get('roll_std_units_14', 6.1)),
-                        "roll_std_units_28": float(row.get('roll_std_units_28', 7.3)),
-                        "price_min": float(row.get('price_min', 70.0)),
-                        "price_max": float(row.get('price_max', 110.0)),
-                        "cost": float(row.get('cost', 60.0)),
+                        "lag_units_sold_1": float(row.get('lag_units_sold_1', 92.0)),
+                        "lag_units_sold_7": float(row.get('lag_units_sold_7', 92.0)),
+                        "lag_units_sold_14": float(row.get('lag_units_sold_14', 93.0)),
+                        "roll_mean_units_7": float(row.get('roll_mean_units_7', 96.4)),
+                        "roll_mean_units_14": float(row.get('roll_mean_units_14', 96.9)),
+                        "roll_mean_units_28": float(row.get('roll_mean_units_28', 96.9)),
+                        "roll_std_units_7": float(row.get('roll_std_units_7', 37.4)),
+                        "roll_std_units_14": float(row.get('roll_std_units_14', 38.5)),
+                        "roll_std_units_28": float(row.get('roll_std_units_28', 39.2)),
+                        "price_min": float(row.get('price_min', 2300000.0)),
+                        "price_max": float(row.get('price_max', 2700000.0)),
+                        "cost": float(row.get('cost', 2250000.0)),
                     }
                     
                     response = requests.post(endpoint, json=payload, timeout=30)

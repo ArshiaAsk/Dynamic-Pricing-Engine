@@ -22,29 +22,30 @@ from src.pricing.features import build_serving_features
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FEATURES_PATH = REPO_ROOT / "models" / "features.json"
 
-# Standard serving request inputs (same base_features used across the suite).
+# Standard serving request inputs (same base_features used across the suite),
+# on the training price scale (D32) with the training-median history features.
 BASE_FEATURES = {
     "product_id": 42,
-    "competitor_price": 89.99,
+    "competitor_price": 2500000.0,
     "dow": 2,
     "is_weekend": 0,
     "week": 15,
     "month": 4,
     "sin_annual": 0.5,
     "cos_annual": 0.866,
-    "lag_units_sold_1": 45.0,
-    "lag_units_sold_7": 42.0,
-    "lag_units_sold_14": 40.0,
-    "roll_mean_units_7": 43.5,
-    "roll_mean_units_14": 41.2,
-    "roll_mean_units_28": 39.8,
-    "roll_std_units_7": 5.2,
-    "roll_std_units_14": 6.1,
-    "roll_std_units_28": 7.3,
+    "lag_units_sold_1": 92.0,
+    "lag_units_sold_7": 92.0,
+    "lag_units_sold_14": 93.0,
+    "roll_mean_units_7": 96.4,
+    "roll_mean_units_14": 96.9,
+    "roll_mean_units_28": 96.9,
+    "roll_std_units_7": 37.4,
+    "roll_std_units_14": 38.5,
+    "roll_std_units_28": 39.2,
 }
 
-# A single candidate price.
-PRICE = 77.0
+# A single candidate price (inside the price_ratio support).
+PRICE = 2500000.0
 
 
 @pytest.fixture(scope="module")

@@ -18,6 +18,13 @@ router = APIRouter()
 
 CONFIG_PATH = Path("configs/config.yaml")
 
+# Default price window when a request omits price_min/price_max, as a fraction of
+# the request's competitor price. The band lies inside the observed price_ratio
+# training support (D32), so a default request never extrapolates. There is no
+# absolute price default anywhere.
+DEFAULT_PRICE_RATIO_MIN = 0.92
+DEFAULT_PRICE_RATIO_MAX = 1.08
+
 with open(CONFIG_PATH) as f:
     config = yaml.safe_load(f)
 
@@ -45,9 +52,18 @@ def optimize_price(payload: PricingRequest):
         # Remove None values
         features_dict = {k: v for k, v in features_dict.items() if v is not None}
         
-        # Get price range from request or config
-        price_min = payload.price_min or config["pricing"].get("price_min", 30.0)
-        price_max = payload.price_max or config["pricing"].get("price_max", 120.0)
+        # Get the price range from the request, or derive it from the competitor
+        # price inside the training support (D32). No absolute default.
+        price_min = (
+            payload.price_min
+            if payload.price_min is not None
+            else payload.competitor_price * DEFAULT_PRICE_RATIO_MIN
+        )
+        price_max = (
+            payload.price_max
+            if payload.price_max is not None
+            else payload.competitor_price * DEFAULT_PRICE_RATIO_MAX
+        )
         
         # Optimization kwargs
         opt_kwargs = {}

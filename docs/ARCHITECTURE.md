@@ -144,8 +144,9 @@ logs parameters, metrics, the model and artifacts to the MLflow tracking URI
    at import time. The engine loads the feature contract and a model.
 3. `POST /v1/optimize-price` validates the body with `PricingRequest`.
 4. The router removes optimization-only fields, takes the price bounds from the request
-   or from `pricing.price_min` / `pricing.price_max` (30.0 / 120.0), and calls
-   `PricingEngine.get_optimal_price`.
+   or, when they are omitted, derives them as 0.92x / 1.08x the request's competitor
+   price (inside the observed `price_ratio` training support), and calls
+   `PricingEngine.get_optimal_price`. There is no absolute price default.
 5. The engine dispatches to `PriceOptimizer`, logs the result to the JSONL prediction
    log, records the request in the health checker, and returns `PricingResponse`.
 
@@ -189,13 +190,13 @@ A verified call with the README payload returns HTTP 200 and:
 
 ```json
 {
-  "optimal_price": 78.26,
-  "expected_demand": 80.53,
-  "expected_revenue": 6302.45,
+  "optimal_price": 2625159.38,
+  "expected_demand": 86.31,
+  "expected_revenue": 226564781.23,
   "optimization_method": "grid_search",
-  "profit_margin": 0.2333,
-  "profit_per_unit": 18.26,
-  "total_profit": 1470.52,
+  "profit_margin": 0.1429,
+  "profit_per_unit": 375159.38,
+  "total_profit": 32378187.22,
   "optimization_success": null,
   "optimization_iterations": null
 }
@@ -261,7 +262,7 @@ them to `logs/predictions/predictions_YYYYMMDD_HH.jsonl`. Errors flush immediate
 |---|---|
 | `data` | `feature_path`, `n_products`, `days`, `seed` |
 | `model` | `n_estimators`, `max_depth`, `learning_rate`, `subsample`, `colsample_bytree`, `min_child_weight`, `gamma`, `reg_alpha`, `reg_lambda` |
-| `pricing` | `model_path`, `feature_columns_path`, `price_min`, `price_max` |
+| `pricing` | `model_path`, `feature_columns_path` |
 | `training` | `test_size`, `model_dir`, `report_dir`, `run_cv`, `tuning_trials` |
 | `features` | `lag_days`, `rolling_windows`, `min_history_days` |
 

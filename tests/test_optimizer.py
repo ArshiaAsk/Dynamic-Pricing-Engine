@@ -70,24 +70,26 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 _MODEL_PATH = _REPO_ROOT / "models" / "demand_model.pkl"
 _FEATURES_PATH = _REPO_ROOT / "models" / "features.json"
 
+# Training price scale (D32); the mock tests above keep their own toy values
+# because they exercise bound arithmetic, not the served model.
 _LIVE_BASE_FEATURES = {
     "product_id": 42,
-    "competitor_price": 89.99,
+    "competitor_price": 2_500_000.0,
     "dow": 2,
     "is_weekend": 0,
     "week": 15,
     "month": 4,
     "sin_annual": 0.5,
     "cos_annual": 0.866,
-    "lag_units_sold_1": 45.0,
-    "lag_units_sold_7": 42.0,
-    "lag_units_sold_14": 40.0,
-    "roll_mean_units_7": 43.5,
-    "roll_mean_units_14": 41.2,
-    "roll_mean_units_28": 39.8,
-    "roll_std_units_7": 5.2,
-    "roll_std_units_14": 6.1,
-    "roll_std_units_28": 7.3,
+    "lag_units_sold_1": 92.0,
+    "lag_units_sold_7": 92.0,
+    "lag_units_sold_14": 93.0,
+    "roll_mean_units_7": 96.4,
+    "roll_mean_units_14": 96.9,
+    "roll_mean_units_28": 96.9,
+    "roll_std_units_7": 37.4,
+    "roll_std_units_14": 38.5,
+    "roll_std_units_28": 39.2,
 }
 
 
@@ -117,14 +119,14 @@ def test_inventory_cap_binds_on_live_optimizer_path(real_model, real_feature_col
     """
     optimizer = PriceOptimizer(real_model, real_feature_columns)
 
-    unconstrained = optimizer.optimize(_LIVE_BASE_FEATURES, 70.0, 110.0)
+    unconstrained = optimizer.optimize(_LIVE_BASE_FEATURES, 2_300_000.0, 2_700_000.0)
     limit = max(1, int(unconstrained["expected_demand"] * 0.5))
     assert unconstrained["expected_demand"] > limit, (
         "test precondition: the cap must be binding "
         f"(unconstrained demand {unconstrained['expected_demand']} <= limit {limit})"
     )
 
-    capped = optimizer.optimize(_LIVE_BASE_FEATURES, 70.0, 110.0, inventory_limit=limit)
+    capped = optimizer.optimize(_LIVE_BASE_FEATURES, 2_300_000.0, 2_700_000.0, inventory_limit=limit)
 
     assert capped["expected_demand"] <= limit
     assert capped["expected_demand"] <= unconstrained["expected_demand"]

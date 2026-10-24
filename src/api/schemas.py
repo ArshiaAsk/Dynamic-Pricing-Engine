@@ -65,25 +65,25 @@ class PricingRequest(BaseModel):
         "json_schema_extra": {
             "example": {
                 "product_id": 42,
-                "competitor_price": 89.99,
+                "competitor_price": 2500000.0,
                 "dow": 2,
                 "is_weekend": 0,
                 "week": 15,
                 "month": 4,
                 "sin_annual": 0.5,
                 "cos_annual": 0.866,
-                "lag_units_sold_1": 45.0,
-                "lag_units_sold_7": 42.0,
-                "lag_units_sold_14": 40.0,
-                "roll_mean_units_7": 43.5,
-                "roll_mean_units_14": 41.2,
-                "roll_mean_units_28": 39.8,
-                "roll_std_units_7": 5.2,
-                "roll_std_units_14": 6.1,
-                "roll_std_units_28": 7.3,
-                "price_min": 70.0,
-                "price_max": 110.0,
-                "cost": 60.0,
+                "lag_units_sold_1": 92.0,
+                "lag_units_sold_7": 92.0,
+                "lag_units_sold_14": 93.0,
+                "roll_mean_units_7": 96.4,
+                "roll_mean_units_14": 96.9,
+                "roll_mean_units_28": 96.9,
+                "roll_std_units_7": 37.4,
+                "roll_std_units_14": 38.5,
+                "roll_std_units_28": 39.2,
+                "price_min": 2300000.0,
+                "price_max": 2700000.0,
+                "cost": 2250000.0,
                 "min_margin_pct": 0.15,
                 "inventory_limit": 100
             }
@@ -110,15 +110,15 @@ class PricingResponse(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "optimal_price": 87.50,
-                "expected_demand": 48.3,
-                "expected_revenue": 4226.25,
+                "optimal_price": 2625159.38,
+                "expected_demand": 86.31,
+                "expected_revenue": 226564781.23,
                 "optimization_method": "grid_search",
-                "profit_margin": 0.314,
-                "profit_per_unit": 27.50,
-                "total_profit": 1328.25,
-                "optimization_success": True,
-                "optimization_iterations": 12
+                "profit_margin": 0.1429,
+                "profit_per_unit": 375159.38,
+                "total_profit": 32378187.22,
+                "optimization_success": None,
+                "optimization_iterations": None
             }
         }
     }

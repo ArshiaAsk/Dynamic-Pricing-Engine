@@ -20,9 +20,6 @@ model:
 pricing:
   model_path: models/demand_model.pkl
   feature_columns_path: models/features.json
-  # Default price range (can be overridden by API request)
-  price_min: 30.0
-  price_max: 120.0
 
 training:
   # Validation set = most recent `test_size` fraction of the timeline.

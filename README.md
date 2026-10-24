@@ -152,25 +152,25 @@ curl -X POST "http://localhost:8000/v1/optimize-price" \
   -H "Content-Type: application/json" \
   -d '{
     "product_id": 42,
-    "competitor_price": 89.99,
+    "competitor_price": 2500000.0,
     "dow": 2,
     "is_weekend": 0,
     "week": 15,
     "month": 4,
     "sin_annual": 0.5,
     "cos_annual": 0.866,
-    "lag_units_sold_1": 45.0,
-    "lag_units_sold_7": 42.0,
-    "lag_units_sold_14": 40.0,
-    "roll_mean_units_7": 43.5,
-    "roll_mean_units_14": 41.2,
-    "roll_mean_units_28": 39.8,
-    "roll_std_units_7": 5.2,
-    "roll_std_units_14": 6.1,
-    "roll_std_units_28": 7.3,
-    "price_min": 70.0,
-    "price_max": 110.0,
-    "cost": 60.0,
+    "lag_units_sold_1": 92.0,
+    "lag_units_sold_7": 92.0,
+    "lag_units_sold_14": 93.0,
+    "roll_mean_units_7": 96.4,
+    "roll_mean_units_14": 96.9,
+    "roll_mean_units_28": 96.9,
+    "roll_std_units_7": 37.4,
+    "roll_std_units_14": 38.5,
+    "roll_std_units_28": 39.2,
+    "price_min": 2300000.0,
+    "price_max": 2700000.0,
+    "cost": 2250000.0,
     "min_margin_pct": 0.15,
     "inventory_limit": 100,
     "optimization_method": "grid_search"
@@ -179,6 +179,29 @@ curl -X POST "http://localhost:8000/v1/optimize-price" \
 
 `product_id` is accepted for request compatibility only — it is not a model
 feature and does not affect the returned price.
+
+Prices are in **currency units** (the synthetic data carries no currency). The
+input above is on the model's training scale: the competitor price is inside
+the observed competitor range and the bounds are 0.92x/1.08x of it, inside the
+observed price/competitor ratio range. The margin floor (2,250,000 x 1.15 =
+2,587,500) binds inside those bounds and moves the recommendation above the
+unconstrained optimum.
+
+Verified response with the seed-42 artifact:
+
+```json
+{
+  "optimal_price": 2625159.38,
+  "expected_demand": 86.31,
+  "expected_revenue": 226564781.23,
+  "optimization_method": "grid_search",
+  "profit_margin": 0.1429,
+  "profit_per_unit": 375159.38,
+  "total_profit": 32378187.22,
+  "optimization_success": null,
+  "optimization_iterations": null
+}
+```
 
 ### Run Tests
 
@@ -411,10 +434,6 @@ model:
   n_estimators: 600      # XGBoost trees
   max_depth: 6          # Tree depth
   learning_rate: 0.05   # Learning rate
-
-pricing:
-  price_min: 30.0
-  price_max: 120.0
 
 training:
   run_cv: false

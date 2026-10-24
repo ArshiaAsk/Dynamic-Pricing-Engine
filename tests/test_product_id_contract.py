@@ -56,24 +56,24 @@ def test_product_id_does_not_change_prediction(client):
     differing (1 vs 999); the predicted demand/price fields must be identical.
     """
     base = {
-        "competitor_price": 89.99,
+        "competitor_price": 2500000.0,
         "dow": 2,
         "is_weekend": 0,
         "week": 15,
         "month": 4,
         "sin_annual": 0.5,
         "cos_annual": 0.866,
-        "lag_units_sold_1": 45.0,
-        "lag_units_sold_7": 42.0,
-        "lag_units_sold_14": 40.0,
-        "roll_mean_units_7": 43.5,
-        "roll_mean_units_14": 41.2,
-        "roll_mean_units_28": 39.8,
-        "roll_std_units_7": 5.2,
-        "roll_std_units_14": 6.1,
-        "roll_std_units_28": 7.3,
-        "price_min": 70.0,
-        "price_max": 110.0,
+        "lag_units_sold_1": 92.0,
+        "lag_units_sold_7": 92.0,
+        "lag_units_sold_14": 93.0,
+        "roll_mean_units_7": 96.4,
+        "roll_mean_units_14": 96.9,
+        "roll_mean_units_28": 96.9,
+        "roll_std_units_7": 37.4,
+        "roll_std_units_14": 38.5,
+        "roll_std_units_28": 39.2,
+        "price_min": 2300000.0,
+        "price_max": 2700000.0,
     }
 
     resp_a = client.post("/v1/optimize-price", json=dict(base, product_id=1))

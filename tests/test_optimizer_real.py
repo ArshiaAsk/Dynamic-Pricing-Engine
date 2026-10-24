@@ -43,29 +43,47 @@ REFERENCE_POINTS = 901
 REVENUE_RATIO = 0.99
 
 # Standard serving input (the same base_features used to verify R1/R2).
-# These are request inputs, not model-derived reference values.
+# These are request inputs, not model-derived reference values. They use the
+# training price scale (D32): the competitor price is inside the observed
+# competitor range and the history features are the training medians.
+COMPETITOR_PRICE = 2_500_000.0
+
 BASE_FEATURES = {
     "product_id": 42,
-    "competitor_price": 89.99,
+    "competitor_price": COMPETITOR_PRICE,
     "dow": 2,
     "is_weekend": 0,
     "week": 15,
     "month": 4,
     "sin_annual": 0.5,
     "cos_annual": 0.866,
-    "lag_units_sold_1": 45.0,
-    "lag_units_sold_7": 42.0,
-    "lag_units_sold_14": 40.0,
-    "roll_mean_units_7": 43.5,
-    "roll_mean_units_14": 41.2,
-    "roll_mean_units_28": 39.8,
-    "roll_std_units_7": 5.2,
-    "roll_std_units_14": 6.1,
-    "roll_std_units_28": 7.3,
+    "lag_units_sold_1": 92.0,
+    "lag_units_sold_7": 92.0,
+    "lag_units_sold_14": 93.0,
+    "roll_mean_units_7": 96.4,
+    "roll_mean_units_14": 96.9,
+    "roll_mean_units_28": 96.9,
+    "roll_std_units_7": 37.4,
+    "roll_std_units_14": 38.5,
+    "roll_std_units_28": 39.2,
 }
 
-R1_BOUNDS = [(30.0, 80.0), (70.0, 110.0), (10.0, 200.0), (100.0, 120.0), (30.0, 120.0)]
-GRID_BOUNDS = (70.0, 110.0)
+# The five bound pairs are expressed as fractions of the competitor price so
+# every bound lies inside the observed price_ratio support [0.85002, 1.14994]
+# (D32). The old absolute ranges (30, 80), (70, 110), (10, 200), (100, 120) and
+# (30, 120) all extrapolated far outside the training scale.
+RATIO_BOUNDS = [
+    (0.88, 1.12),
+    (0.92, 1.08),
+    (0.96, 1.04),
+    (0.86, 1.00),
+    (1.00, 1.14),
+]
+R1_BOUNDS = [
+    (COMPETITOR_PRICE * lower, COMPETITOR_PRICE * upper)
+    for lower, upper in RATIO_BOUNDS
+]
+GRID_BOUNDS = (COMPETITOR_PRICE * 0.92, COMPETITOR_PRICE * 1.08)
 GRID_STEPS = 50
 
 
@@ -143,14 +161,14 @@ def test_grid_optimizer_builds_complete_feature_frame(real_feature_columns):
     """
     from src.pricing.features import build_serving_features
 
-    features = build_serving_features(BASE_FEATURES, price=77.0, feature_columns=real_feature_columns)
+    features = build_serving_features(BASE_FEATURES, price=COMPETITOR_PRICE, feature_columns=real_feature_columns)
     missing = [col for col in real_feature_columns if col not in features]
     assert missing == []
     assert list(features.keys()) == list(real_feature_columns)
 
 
 def test_grid_optimizer_reaches_reference_optimum(real_model, real_feature_columns):
-    """R2: optimize(base, 70, 110, 50) returns without raising and is near-optimal."""
+    """R2: optimize on GRID_BOUNDS returns without raising and is near-optimal."""
     _, _, reference_revenue = _reference_curve(
         real_model, real_feature_columns, BASE_FEATURES, *GRID_BOUNDS
     )
@@ -174,7 +192,8 @@ def test_served_grid_optimizer_reaches_reference_optimum(
 
     ``grid_search`` is the only method served after R6, so it must reach
     >= 0.99x the test-time 901-point reference on narrow and wide bounds alike —
-    the fixed 50-point grid undershot wide ranges (e.g. ~0.971 on ``(30,120)``).
+    the fixed 50-point grid undershot wide ranges. The bounds are fractions of
+    the competitor price inside the training support (D32).
     """
     _, _, reference_revenue = _reference_curve(
         real_model, real_feature_columns, BASE_FEATURES, price_min, price_max

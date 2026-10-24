@@ -17,26 +17,29 @@ from src.api.schemas import PricingResponse
 
 # Standard request payload (same inputs used across the suite). The method is
 # filled in per test; the canonical method is "grid_search" (ROADMAP R6).
+# Training price scale (D32): the competitor price is inside the observed
+# competitor range and the bounds are 0.92x/1.08x of it, inside the observed
+# price_ratio support. The history features are the training medians.
 BASE_PAYLOAD = {
     "product_id": 42,
-    "competitor_price": 89.99,
+    "competitor_price": 2500000.0,
     "dow": 2,
     "is_weekend": 0,
     "week": 15,
     "month": 4,
     "sin_annual": 0.5,
     "cos_annual": 0.866,
-    "lag_units_sold_1": 45.0,
-    "lag_units_sold_7": 42.0,
-    "lag_units_sold_14": 40.0,
-    "roll_mean_units_7": 43.5,
-    "roll_mean_units_14": 41.2,
-    "roll_mean_units_28": 39.8,
-    "roll_std_units_7": 5.2,
-    "roll_std_units_14": 6.1,
-    "roll_std_units_28": 7.3,
-    "price_min": 70.0,
-    "price_max": 110.0,
+    "lag_units_sold_1": 92.0,
+    "lag_units_sold_7": 92.0,
+    "lag_units_sold_14": 93.0,
+    "roll_mean_units_7": 96.4,
+    "roll_mean_units_14": 96.9,
+    "roll_mean_units_28": 96.9,
+    "roll_std_units_7": 37.4,
+    "roll_std_units_14": 38.5,
+    "roll_std_units_28": 39.2,
+    "price_min": 2300000.0,
+    "price_max": 2700000.0,
 }
 
 # Request-only keys the optimizer never sees; the rest are model features.
@@ -140,7 +143,7 @@ def test_optimize_price_endpoint(client):
     assert "optimal_price" in data
     assert "expected_demand" in data
     assert "expected_revenue" in data
-    assert 70.0 <= data["optimal_price"] <= 110.0
+    assert BASE_PAYLOAD["price_min"] <= data["optimal_price"] <= BASE_PAYLOAD["price_max"]
 
 
 def test_optimize_with_constraints(client):
@@ -148,7 +151,7 @@ def test_optimize_with_constraints(client):
     response = client.post(
         "/v1/optimize-price",
         json=_payload(
-            cost=60.0,
+            cost=2000000.0,
             min_margin_pct=0.15,
             inventory_limit=100,
             optimization_method="grid_search",
@@ -201,7 +204,7 @@ def test_grid_search_and_alias_accepted(client):
         assert response.status_code == 200, method
         data = response.json()
         assert data["optimization_method"] == method
-        assert 70.0 <= data["optimal_price"] <= 110.0
+        assert BASE_PAYLOAD["price_min"] <= data["optimal_price"] <= BASE_PAYLOAD["price_max"]
 
 
 def test_legacy_bayesian_method_rejected(client):
@@ -223,7 +226,7 @@ def test_unknown_method_rejected(client):
 def test_invalid_price_range(client):
     """Test validation for invalid price range"""
     response = client.post(
-        "/v1/optimize-price", json=_payload(price_min=110.0, price_max=70.0)
+        "/v1/optimize-price", json=_payload(price_min=2700000.0, price_max=2300000.0)
     )
 
     assert response.status_code == 422  # Validation error
