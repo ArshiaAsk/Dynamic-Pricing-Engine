@@ -20,6 +20,8 @@ model:
 pricing:
   model_path: models/demand_model.pkl
   feature_columns_path: models/features.json
+  # Written by training from the train split (D32); loaded at startup.
+  training_support_path: models/training_support.json
 
 training:
   # Validation set = most recent `test_size` fraction of the timeline.

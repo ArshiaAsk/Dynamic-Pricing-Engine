@@ -28,6 +28,7 @@ pytest.importorskip("mlflow")
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = REPO_ROOT / "models" / "demand_model.pkl"
 FEATURES_PATH = REPO_ROOT / "models" / "features.json"
+SUPPORT_PATH = REPO_ROOT / "models" / "training_support.json"
 MODEL_NAME = "demand_forecasting_model"
 
 
@@ -36,6 +37,7 @@ def _engine_config():
         "pricing": {
             "model_path": str(MODEL_PATH),
             "feature_columns_path": str(FEATURES_PATH),
+            "training_support_path": str(SUPPORT_PATH),
             "registered_model_name": MODEL_NAME,
         }
     }

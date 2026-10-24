@@ -7,6 +7,7 @@ from threading import Lock
 import time
 
 from src.pricing.optimizer import PriceOptimizer
+from src.pricing.support import history_defaults, load_training_support
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -20,6 +21,7 @@ class PricingEngine:
 
         self.model_path = Path(config["pricing"]["model_path"])
         self.feature_path = Path(config["pricing"]["feature_columns_path"])
+        self.support_path = Path(config["pricing"]["training_support_path"])
         
         self.model_name = config["pricing"].get(
             "registered_model_name", "demand_forecasting_model"
@@ -28,6 +30,8 @@ class PricingEngine:
 
         self.model = None
         self.feature_columns = None
+        self.training_support = None
+        self.history_defaults = {}
 
         self._last_reload_time = 0
         self._current_version = None
@@ -136,9 +140,16 @@ class PricingEngine:
             with open(self.feature_path) as f:
                 self.feature_columns = json.load(f)
 
+            # Load the training support next to the model (D32). A missing or
+            # invalid artifact is a startup failure, like a missing model.
+            self.training_support = load_training_support(self.support_path)
+            self.history_defaults = history_defaults(self.training_support)
+
             logger.info(
                 f"Pricing engine ready | features: {len(self.feature_columns)} | "
-                f"source: {self._model_source} | model_version: {self._current_version}"
+                f"source: {self._model_source} | model_version: {self._current_version} | "
+                f"training_support: {self.support_path} "
+                f"({self.training_support['n_rows']} train rows)"
             )
 
     def get_optimal_price(

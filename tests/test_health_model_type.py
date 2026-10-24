@@ -53,11 +53,13 @@ def pyfunc_model(real_model):
 class _StubEngine:
     """Minimal stand-in for PricingEngine exposing the health-check inputs."""
 
-    def __init__(self, model, feature_columns, source="local", version=None):
+    def __init__(self, model, feature_columns, source="local", version=None,
+                 training_support=None):
         self.model = model
         self.feature_columns = feature_columns
         self.model_source = source
         self.model_version = version
+        self.training_support = training_support
 
 
 def _install_engine(monkeypatch, model, feature_columns, source="local", version=None):

@@ -19,7 +19,11 @@ def test_missing_model_reports_degraded_without_loaded():
     health = HealthChecker().check_health(model=None)
 
     assert health["status"] == "degraded"
-    assert health["checks"]["model"] == {"status": "warning", "loaded": False}
+    assert health["checks"]["model"] == {
+        "status": "warning",
+        "loaded": False,
+        "training_support": {"loaded": False},
+    }
     assert set(health["metrics"]) == {
         "total_requests", "total_errors", "error_rate", "last_prediction"
     }

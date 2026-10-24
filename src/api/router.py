@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from src.api.schemas import PricingRequest, PricingResponse
 from src.pricing.engine import PricingEngine
+from src.pricing.features import apply_history_defaults
+from src.pricing.support import default_price_bounds, validate_price_support
 from src.monitoring.prediction_logger import get_prediction_logger
 from src.monitoring.health_checker import get_health_checker
 from pathlib import Path
@@ -17,13 +19,6 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 CONFIG_PATH = Path("configs/config.yaml")
-
-# Default price window when a request omits price_min/price_max, as a fraction of
-# the request's competitor price. The band lies inside the observed price_ratio
-# training support (D32), so a default request never extrapolates. There is no
-# absolute price default anywhere.
-DEFAULT_PRICE_RATIO_MIN = 0.92
-DEFAULT_PRICE_RATIO_MAX = 1.08
 
 with open(CONFIG_PATH) as f:
     config = yaml.safe_load(f)
@@ -52,18 +47,40 @@ def optimize_price(payload: PricingRequest):
         # Remove None values
         features_dict = {k: v for k, v in features_dict.items() if v is not None}
         
-        # Get the price range from the request, or derive it from the competitor
-        # price inside the training support (D32). No absolute default.
-        price_min = (
-            payload.price_min
-            if payload.price_min is not None
-            else payload.competitor_price * DEFAULT_PRICE_RATIO_MIN
+        # Price range: the request's bounds, or the observed price_ratio support
+        # around the request's competitor price (D32). No absolute default.
+        default_min, default_max = default_price_bounds(
+            payload.competitor_price, engine.training_support
         )
-        price_max = (
-            payload.price_max
-            if payload.price_max is not None
-            else payload.competitor_price * DEFAULT_PRICE_RATIO_MAX
+        price_min = payload.price_min if payload.price_min is not None else default_min
+        price_max = payload.price_max if payload.price_max is not None else default_max
+
+        # Reject a request outside the model's training support (D32). The body
+        # keeps the validation shape: error code, message with the supported
+        # ranges, field-level details and the request id.
+        support_errors = validate_price_support(
+            payload.competitor_price, price_min, price_max, engine.training_support
         )
+        if support_errors:
+            logger.warning(
+                f"Request outside the training support (request_id: {request_id}): "
+                f"{[error['message'] for error in support_errors]}"
+            )
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "error": "outside_training_support",
+                    "message": (
+                        "Request is outside the model's training support: "
+                        + " ".join(error["message"] for error in support_errors)
+                    ),
+                    "details": support_errors,
+                    "request_id": request_id,
+                },
+            )
+
+        # Omitted history features are filled with the training medians (D32).
+        features_dict = apply_history_defaults(features_dict, engine.history_defaults)
         
         # Optimization kwargs
         opt_kwargs = {}
@@ -101,7 +118,7 @@ def optimize_price(payload: PricingRequest):
         health_checker.record_request()
         
         logger.info(f"Optimized price for product {payload.product_id}: "
-                   f"${result['optimal_price']:.2f} (request_id: {request_id})")
+                   f"{result['optimal_price']:.2f} (request_id: {request_id})")
         
         return PricingResponse(**result)
     
@@ -143,6 +160,7 @@ def health_check():
         model_source=engine.model_source,
         model_version=engine.model_version,
         feature_columns=engine.feature_columns,
+        training_support=engine.training_support,
     )
     
     # Return 503 if unhealthy

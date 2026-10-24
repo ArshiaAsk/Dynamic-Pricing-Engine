@@ -20,7 +20,7 @@ class HealthChecker:
         self.last_prediction_time = None
     
     def check_health(self, model=None, model_source=None, model_version=None,
-                     feature_columns=None) -> Dict:
+                     feature_columns=None, training_support=None) -> Dict:
         """
         Comprehensive health check
 
@@ -29,6 +29,7 @@ class HealthChecker:
             model_source: Where the model came from — "mlflow" or "local".
             model_version: The active registry model version, if any.
             feature_columns: The feature columns the served model expects.
+            training_support: The loaded training-support artifact, if any.
 
         Returns:
             Health status dictionary
@@ -59,6 +60,17 @@ class HealthChecker:
             health['checks']['model']['source'] = model_source
         if model_version is not None:
             health['checks']['model']['version'] = model_version
+
+        # Report whether the training support is loaded (D32). The engine fails
+        # at startup when it is missing, so this is normally True.
+        health['checks']['model']['training_support'] = {
+            'loaded': training_support is not None,
+        }
+        if training_support is not None:
+            health['checks']['model']['training_support'].update({
+                'split': training_support.get('split'),
+                'n_rows': training_support.get('n_rows'),
+            })
         
         # System resources
         try:

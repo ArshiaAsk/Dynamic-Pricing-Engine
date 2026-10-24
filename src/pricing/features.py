@@ -13,6 +13,24 @@ from typing import Dict, Optional
 import numpy as np
 
 
+def apply_history_defaults(features: Dict, history_defaults: Dict) -> Dict:
+    """Fill omitted lag and rolling unit features with training medians (D32).
+
+    The medians come from ``models/training_support.json`` (the train split's
+    medians); this module has no numeric history default of its own.
+
+    Args:
+        features: Request-level features; a missing or ``None`` history field is
+            filled.
+        history_defaults: Feature name -> training median.
+    """
+    filled = dict(features)
+    for name, value in history_defaults.items():
+        if filled.get(name) is None:
+            filled[name] = value
+    return filled
+
+
 def build_serving_features(
     base_features: Dict,
     price: float,
